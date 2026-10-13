@@ -2,6 +2,8 @@ package com.fitto.coupleemoji.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fitto.common.ai.GeminiClient;
+import com.fitto.common.currency.CurrencyService;
+import com.fitto.common.currency.ShopItem;
 import com.fitto.common.ai.GeneratedImage;
 import com.fitto.common.event.CoupleEvent;
 import com.fitto.common.event.CoupleEventPublisher;
@@ -120,6 +122,7 @@ public class CoupleEmojiService {
 
     private final CoupleEmojiRepository repository;
     private final CoupleEmojiSetRepository setRepository;
+    private final CurrencyService currencyService;
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
     private final GeminiClient geminiClient;
@@ -134,6 +137,7 @@ public class CoupleEmojiService {
 
     public CoupleEmojiService(CoupleEmojiRepository repository,
                               CoupleEmojiSetRepository setRepository,
+                              CurrencyService currencyService,
                               RelationRepository relationRepository,
                               UserRepository userRepository,
                               GeminiClient geminiClient,
@@ -147,6 +151,7 @@ public class CoupleEmojiService {
                               PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.setRepository = setRepository;
+        this.currencyService = currencyService;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
         this.geminiClient = geminiClient;
@@ -162,9 +167,27 @@ public class CoupleEmojiService {
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /** 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다 */
+    /**
+     * 요청 스레드 → 백그라운드 작업으로 넘기는 것 — 검증이 끝난 값만 담는다.
+     *
+     * @param currencyKey 재화로 냈으면 그 지출의 멱등 키 — 한 장도 못 남기면 이 키로 돌려준다. 아니면 null
+     * @param paidPrice   재화로 낸 양(아니면 0)
+     */
     public record GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl,
-                                   List<CoupleEmojiEmotion> emotions, PlanGuard.Charge charge) {
+                                   List<CoupleEmojiEmotion> emotions, PlanGuard.Charge charge,
+                                   String currencyKey, long paidPrice) {
+        /** 재화와 무관한 티켓 — 쿼터·크레딧·무료로 연 회차. */
+        public GenerationTicket(Long relationId, Long userId, Long subjectUserId, String sourceImageUrl,
+                                List<CoupleEmojiEmotion> emotions, PlanGuard.Charge charge) {
+            this(relationId, userId, subjectUserId, sourceImageUrl, emotions, charge, null, 0);
+        }
+    }
+
+    /** 값을 치른 결과 — 무엇으로 냈고, 재화면 얼마를 어떤 키로 냈나. */
+    private record Payment(PlanGuard.Charge charge, String currencyKey, long paidPrice) {
+        static Payment of(PlanGuard.Charge charge) {
+            return new Payment(charge, null, 0);
+        }
     }
 
     /**
@@ -202,8 +225,9 @@ public class CoupleEmojiService {
              */
             List<CoupleEmojiEmotion> emotions = resolveEmotions(request.emotions());
             // 플랜 한도에 막히면 산 세트(크레딧)를 쓴다 — 어디서 차감했는지 티켓이 들고 있어야 되돌릴 수 있다
-            PlanGuard.Charge charge = chargeOrWelcome(userId, couple.partnerOf(userId));
-            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions, charge);
+            Payment payment = pay(userId, couple.partnerOf(userId), request);
+            return new GenerationTicket(couple.getId(), userId, subject, request.sourceImageUrl(), emotions,
+                    payment.charge(), payment.currencyKey(), payment.paidPrice());
         } catch (RuntimeException e) {
             /*
              * 앱은 업로드 → 접수 순서라, 여기서 거절(402·429·관계 없음·대상 오류)해도 원본은 이미
@@ -245,28 +269,83 @@ public class CoupleEmojiService {
     }
 
     /**
-     * 값을 치른다 — 플랜 한도 → 산 세트 → <b>커플당 첫 1회 무료</b> 순.
+     * 값을 치른다 — 플랜 한도 → 산 세트(옛 크레딧) → <b>커플당 첫 1회 무료</b> → <b>재화</b>(앱이 요청했을 때만) 순.
      *
-     * <p>무료는 마지막이다. 한도나 산 세트로 만들 수 있는 사람이 무료를 먼저 쓰면 정작 막혔을 때 쓸 게 없다.
-     * 결제로 풀리는 거절(402)일 때만 무료를 본다 — 429(PRO 남용 방지)·AI 안전망 거절은 무료로도 풀지 않는다.
-     * 무료 세트에는 다시 그리기가 없다(docs/EMOJI_12_REGEN_2026-10-13.md §8-D10 — 구매 유인).
+     * <p>무료는 재화보다 앞이다. 한도나 산 세트로 만들 수 있는 사람이 무료를 먼저 쓰면 정작 막혔을 때 쓸 게 없고, 무료가
+     * 남았는데 재화를 빼는 것은 사용자 손해다. 결제로 풀리는 거절(402)일 때만 무료·재화를 본다 — 429(PRO 남용 방지)·AI
+     * 안전망 거절은 무엇으로도 풀지 않는다. 무료 세트에는 다시 그리기가 없다(EMOJI_12_REGEN §8-D10).
+     *
+     * <p><b>재화는 앱이 {@code payWithCurrency=true} 로 보낼 때만 뺀다</b> — 사용자가 "재화 39로 만들기"를 누른 것이다.
+     * 서버가 잔액을 보고 알아서 빼지 않는다(모르는 사이 돈이 나가지 않게). 옛 앱은 이 값을 보내지 않는다.
      */
-    private PlanGuard.Charge chargeOrWelcome(Long userId, Long partnerId) {
+    private Payment pay(Long userId, Long partnerId, GenerateCoupleEmojiRequest request) {
         try {
-            return geminiClient.requireImageConfiguredAndCharge(userId, FEATURE);
+            return Payment.of(geminiClient.requireImageConfiguredAndCharge(userId, FEATURE));
         } catch (BusinessException refused) {
             boolean payable = refused.getErrorCode() == ErrorCode.PLAN_UPGRADE_REQUIRED
                     || refused.getErrorCode() == ErrorCode.PLAN_LIMIT_EXCEEDED;
-            if (!payable || !planGuard.claimWelcome(userId, partnerId, FEATURE)) {
+            if (!payable) {
                 throw refused;
             }
-            try {
-                geminiClient.requireImageConfiguredAndCountBackstop(userId);
-            } catch (RuntimeException backstop) {
-                planGuard.refund(userId, FEATURE, PlanGuard.Charge.WELCOME);
-                throw backstop;
+            if (planGuard.claimWelcome(userId, partnerId, FEATURE)) {
+                countBackstopOrUndo(userId, () -> planGuard.refund(userId, FEATURE, PlanGuard.Charge.WELCOME));
+                return Payment.of(PlanGuard.Charge.WELCOME);
             }
-            return PlanGuard.Charge.WELCOME;
+            if (!Boolean.TRUE.equals(request.payWithCurrency())) {
+                throw refused;
+            }
+            return payWithCurrency(userId, request.requestId());
+        }
+    }
+
+    /**
+     * 재화로 낸다 — 가격은 서버 카탈로그({@code shop_items.EMOJI_SET}). 안전망을 먼저 센다: 안전망에 막히면 재화를 빼기
+     * 전에 끝난다. 지출 키는 요청 키에서 만든다 — 같은 요청이 다시 와도(재시도) 두 번 빠지지 않는다.
+     */
+    private Payment payWithCurrency(Long userId, String requestId) {
+        long price = currencyService.priceOf(ShopItem.EMOJI_SET);
+        geminiClient.requireImageConfiguredAndCountBackstop(userId);
+        String key = "spend:emoji:" + userId + ":" + (requestId != null ? requestId : UUID.randomUUID().toString());
+        boolean spent;
+        try {
+            spent = currencyService.spend(userId, price, "EMOJI_SET", null, key);
+        } catch (RuntimeException e) {
+            geminiClient.refund(userId, FEATURE, PlanGuard.Charge.NONE);   // 안전망 1회를 되돌린다
+            throw e;
+        }
+        if (!spent) {
+            /*
+             * 이 요청 키로 이미 냈다 — 요청 키 선점(15분)이 끝난 뒤 같은 요청이 다시 온 것이다. 여기서 또 그리면 한 번 내고
+             * 두 번 받는다. 앱은 접수가 확정되면 키를 새로 만드므로 정상 흐름에선 오지 않는다.
+             */
+            geminiClient.refund(userId, FEATURE, PlanGuard.Charge.NONE);
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 처리된 요청이에요. 다시 만들어 주세요.");
+        }
+        return new Payment(PlanGuard.Charge.CURRENCY, key, price);
+    }
+
+    private void countBackstopOrUndo(Long userId, Runnable undo) {
+        try {
+            geminiClient.requireImageConfiguredAndCountBackstop(userId);
+        } catch (RuntimeException backstop) {
+            undo.run();
+            throw backstop;
+        }
+    }
+
+    /**
+     * 결과를 하나도 주지 못했다 — 차감한 곳에서 되돌린다. 재화는 플랜 경로({@code PlanGuard.refund})가 모르므로 여기서
+     * 따로 돌려준다(지출 키 하나에 환불 한 번 — 두 번 불려도 한 번만).
+     */
+    private void refundCharge(GenerationTicket ticket, String batchId) {
+        geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
+        refundCurrency(ticket, batchId);
+    }
+
+    /** 재화만 돌려준다 — 외형 추출 실패처럼 플랜·안전망은 GeminiClient 가 이미 되돌린 경우. */
+    private void refundCurrency(GenerationTicket ticket, String batchId) {
+        if (ticket.charge() == PlanGuard.Charge.CURRENCY && ticket.currencyKey() != null) {
+            currencyService.refundSpend(ticket.userId(), ticket.paidPrice(), "EMOJI_SET", batchId, ticket.currencyKey());
         }
     }
 
@@ -328,10 +407,17 @@ public class CoupleEmojiService {
         try {
             source = imageFetcher.fetch(ticket.sourceImageUrl());
         } catch (RuntimeException e) {
-            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
+            refundCharge(ticket, null);
             throw e;
         }
-        String facts = describe(ticket, source);
+        String facts;
+        try {
+            facts = describe(ticket, source);
+        } catch (RuntimeException e) {
+            // 플랜·안전망은 GeminiClient 가 charge 대로 이미 되돌렸다 — 재화는 그쪽이 모르므로 여기서
+            refundCurrency(ticket, null);
+            throw e;
+        }
 
         String batchId = UUID.randomUUID().toString();
         List<CoupleEmojiEmotion> targets = ticket.emotions();
@@ -342,8 +428,9 @@ public class CoupleEmojiService {
                 .relationId(ticket.relationId())
                 .createdBy(ticket.userId())
                 .chargeSource(ticket.charge() == null ? PlanGuard.Charge.NONE.name() : ticket.charge().name())
-                // 첫 1회 무료 세트에는 다시 그리기가 없다(chargeOrWelcome 주석)
+                // 첫 1회 무료 세트에는 다시 그리기가 없다(pay 주석)
                 .regenTotal(ticket.charge() == PlanGuard.Charge.WELCOME ? 0 : CoupleEmojiSet.REGEN_PER_SET)
+                .paidPrice(ticket.charge() == PlanGuard.Charge.CURRENCY ? ticket.paidPrice() : null)
                 .build()));
 
         Map<CoupleEmojiEmotion, Object> results = drawRound(ticket, source, facts, batchId, targets);
@@ -378,7 +465,7 @@ public class CoupleEmojiService {
         }
 
         if (saved.isEmpty()) {
-            geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
+            refundCharge(ticket, batchId);
             transactionTemplate.executeWithoutResult(status -> setRepository.deleteById(batchId));
             // 사용자에게는 BusinessException 의 한국어만 보여준다 — 그 밖의 예외는 일반 실패 문구로 감싼다
             throw lastFailure instanceof BusinessException be ? be : new BusinessException(ErrorCode.AI_ANALYSIS_FAILED);
@@ -672,7 +759,7 @@ public class CoupleEmojiService {
      * {@code AiJobService.submit} 의 거절 콜백으로 부른다.
      */
     public void abandon(GenerationTicket ticket) {
-        geminiClient.refund(ticket.userId(), FEATURE, ticket.charge());
+        refundCharge(ticket, null);
         imageDeleter.deleteAll(List.of(ticket.sourceImageUrl()));
     }
 

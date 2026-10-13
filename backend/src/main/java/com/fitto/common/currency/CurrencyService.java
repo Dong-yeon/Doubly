@@ -73,18 +73,24 @@ public class CurrencyService {
     /**
      * 지출 — 모자라면 {@code CURRENCY_INSUFFICIENT}(402). 같은 키로 다시 오면 다시 빼지 않는다(멱등).
      *
+     * <p><b>반환값을 꼭 본다.</b> {@code false} 는 "이 키는 이미 냈다"는 뜻이라, 호출자가 그 대가(생성 등)를 또 주면
+     * 한 번 내고 두 번 받는 길이 된다(요청 키 선점이 만료된 뒤의 재전송).
+     *
      * @param key 이 지출의 멱등 키 — 예: {@code spend:emoji:{userId}:{requestId}}. 환불은 이 키에서 만든다({@link #refundKey})
+     * @return 이번에 새로 뺐으면 {@code true}, 이미 낸 키면 {@code false}
      */
-    public void spend(Long userId, long amount, String refType, String refId, String key) {
+    public boolean spend(Long userId, long amount, String refType, String refId, String key) {
         if (ledgerRepository.existsByIdempotencyKey(key)) {
-            return;
+            return false;
         }
         ensureWallet(userId);
         try {
             tx.spend(userId, amount, refType, refId, key);
+            return true;
         } catch (DataIntegrityViolationException e) {
             // 같은 키가 동시에 두 번 — 뒤의 것은 뺀 잔액까지 되돌아갔다. 앞의 것이 이미 냈다.
             log.debug("재화 지출 중복 — 이미 차감 (key={})", key);
+            return false;
         }
     }
 

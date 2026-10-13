@@ -58,18 +58,24 @@ public class CoupleEmojiSet {
     @Column(name = "regen_used", nullable = false)
     private int regenUsed;
 
+    /** 이 세트에 쓴 재화(V140) — 한 장도 못 남기면 이만큼 돌려준다. 쿼터·크레딧·무료로 만든 세트는 null. */
+    @Column(name = "paid_price")
+    private Long paidPrice;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
-    private CoupleEmojiSet(String batchId, Long relationId, Long createdBy, String chargeSource, int regenTotal) {
+    private CoupleEmojiSet(String batchId, Long relationId, Long createdBy, String chargeSource, int regenTotal,
+                           Long paidPrice) {
         this.batchId = batchId;
         this.relationId = relationId;
         this.createdBy = createdBy;
         this.chargeSource = chargeSource;
         this.regenTotal = regenTotal;
         this.regenUsed = 0;
+        this.paidPrice = paidPrice;
     }
 
     public int regenRemaining() {

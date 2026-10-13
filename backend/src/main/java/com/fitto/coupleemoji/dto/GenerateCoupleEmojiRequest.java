@@ -20,15 +20,24 @@ import java.util.List;
  * @param requestId      같은 요청을 두 번 받지 않기 위한 키(앱이 만들기를 누를 때 한 번 만든다). 같은 키가 다시 오면
  *                       차감하지 않고 처음 접수한 작업 id 를 돌려준다 — 더블탭·네트워크 재시도로 세트가 두 번
  *                       차감되던 구멍(docs/EMOJI_12_REGEN_2026-10-13.md §1-3). 옛 앱은 보내지 않는다(null 허용).
+ * @param payWithCurrency 플랜 한도·첫 무료로 열리지 않으면 <b>유료 재화로 낸다</b> — 사용자가 "재화로 만들기"를 누른 것.
+ *                       비거나 false 면 재화를 쓰지 않고 지금처럼 402 다(서버가 잔액을 보고 알아서 빼지 않는다).
  */
 public record GenerateCoupleEmojiRequest(
         @NotBlank String sourceImageUrl,
         Long subjectUserId,
         List<CoupleEmojiEmotion> emotions,
-        @Pattern(regexp = "[A-Za-z0-9_-]{8,64}", message = "요청 키 형식이 올바르지 않아요.") String requestId
+        @Pattern(regexp = "[A-Za-z0-9_-]{8,64}", message = "요청 키 형식이 올바르지 않아요.") String requestId,
+        Boolean payWithCurrency
 ) {
     /** 요청 키 없이 — 옛 앱과 테스트가 쓰는 모양. */
     public GenerateCoupleEmojiRequest(String sourceImageUrl, Long subjectUserId, List<CoupleEmojiEmotion> emotions) {
-        this(sourceImageUrl, subjectUserId, emotions, null);
+        this(sourceImageUrl, subjectUserId, emotions, null, null);
+    }
+
+    /** 요청 키만 — 재화를 쓰지 않는 앱(1.0.7 OTA 이후)의 모양. */
+    public GenerateCoupleEmojiRequest(String sourceImageUrl, Long subjectUserId, List<CoupleEmojiEmotion> emotions,
+                                      String requestId) {
+        this(sourceImageUrl, subjectUserId, emotions, requestId, null);
     }
 }
