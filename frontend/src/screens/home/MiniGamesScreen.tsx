@@ -16,7 +16,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
-import { catchMindApi, gameStreakApi, omokApi, puzzleApi, sudokuApi, wallRaceApi } from '../../api/game';
+import { catchMindApi, gameStreakApi, omokApi, puzzleApi, quartoApi, sudokuApi, wallRaceApi } from '../../api/game';
+import { QUARTO_DISPLAY_NAME } from '../../constants/quarto';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
@@ -28,6 +29,7 @@ import type {
   GameStreak,
   OmokGame,
   PuzzleBattleGame,
+  QuartoGame,
   SudokuGame,
   WallRaceGame,
 } from '../../types';
@@ -43,6 +45,7 @@ export function MiniGamesScreen({ navigation }: Props) {
   const [catchMind, setCatchMind] = useState<CatchMindGame | null>(null);
   const [puzzle, setPuzzle] = useState<PuzzleBattleGame | null>(null);
   const [wallRace, setWallRace] = useState<WallRaceGame | null>(null);
+  const [quarto, setQuarto] = useState<QuartoGame | null>(null);
   const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [streak, setStreak] = useState<GameStreak | null>(null);
   const [openingDaily, setOpeningDaily] = useState(false);
@@ -50,7 +53,7 @@ export function MiniGamesScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, o, h, d, st, cm, pz, wr] = await Promise.all([
+      const [s, o, h, d, st, cm, pz, wr, qt] = await Promise.all([
         sudokuApi.current(),
         omokApi.current(),
         // 전적은 서버가 센다(끝낸 판 전부). 실패해도 카드 전체를 비우지 않게 따로 받는다
@@ -60,12 +63,15 @@ export function MiniGamesScreen({ navigation }: Props) {
         catchMindApi.current(),
         puzzleApi.current(),
         wallRaceApi.current(),
+        // 새 종목 — 서버가 아직 모르는 경로여도 다른 카드까지 비우지 않게 따로 삼킨다
+        quartoApi.current().catch(() => null),
       ]);
       setSudoku(s);
       setOmok(o);
       setCatchMind(cm);
       setPuzzle(pz);
       setWallRace(wr);
+      setQuarto(qt);
       setOmokRecord(h ? { me: h.me, partner: h.partner } : null);
       setDaily(d);
       setStreak(st);
@@ -114,6 +120,13 @@ export function MiniGamesScreen({ navigation }: Props) {
       ? `내 차례 · ${wallRace.moveCount}수`
       : `${wallRace.partnerName ?? '상대'} 차례 · ${wallRace.moveCount}수`
     : '벽으로 길을 돌리는 9×9 대결';
+
+  // 놓인 말 수 = 첫 수(말 주기)를 뺀 수 번호
+  const quartoStatus = quarto
+    ? quarto.myTurn
+      ? quarto.myAction === 'GIVE' ? '내 차례 · 건넬 말 고르기' : `내 차례 · ${Math.max(0, quarto.moveNo - 1)}/16칸`
+      : `${quarto.partnerName ?? '상대'} 차례 · ${Math.max(0, quarto.moveNo - 1)}/16칸`
+    : '상대가 고른 말로 넷이 같은 줄 만들기';
 
   /* 내 차례인가 = 상대가 낸 문제를 내가 아직 못 맞혔는가 */
   const catchMindMine = catchMind?.role === 'GUESSER';
@@ -249,6 +262,15 @@ export function MiniGamesScreen({ navigation }: Props) {
           badge={wallRace ? (wallRace.myTurn ? '내 차례' : '기다리는 중') : undefined}
           highlight={!!wallRace?.myTurn}
           onPress={() => navigation.navigate('WallRace')}
+        />
+
+        <GameCard
+          icon="grid"
+          title={QUARTO_DISPLAY_NAME}
+          subtitle={quartoStatus}
+          badge={quarto ? (quarto.myTurn ? '내 차례' : '기다리는 중') : undefined}
+          highlight={!!quarto?.myTurn}
+          onPress={() => navigation.navigate('Quarto')}
         />
 
         <GameCard

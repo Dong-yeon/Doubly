@@ -8,6 +8,7 @@ import com.fitto.common.notification.PushLinks;
 import com.fitto.game.domain.CoupleGame;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.domain.GameType;
+import com.fitto.game.domain.QuartoGame;
 import com.fitto.game.domain.SudokuGame;
 import com.fitto.game.repository.CoupleGameRepository;
 import com.fitto.relation.domain.Relation;
@@ -169,6 +170,7 @@ public class GameNudgeService {
             case CATCH_MIND -> "캐치마인드";
             case PUZZLE_BATTLE -> "연쇄 퍼즐";
             case WALL_RACE -> "길막기";
+            case QUARTO -> QuartoGame.DISPLAY_NAME;
         };
     }
 
@@ -179,6 +181,7 @@ public class GameNudgeService {
             case CATCH_MIND -> PushLinks.GAME_CATCH_MIND;
             case PUZZLE_BATTLE -> PushLinks.GAME_PUZZLE;
             case WALL_RACE -> PushLinks.GAME_WALL_RACE;
+            case QUARTO -> PushLinks.GAME_QUARTO;
         };
     }
 }

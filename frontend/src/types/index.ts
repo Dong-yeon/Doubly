@@ -922,7 +922,58 @@ export interface WallRaceGame {
   completedAt?: string | null;
 }
 
-export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND' | 'PUZZLE_BATTLE' | 'WALL_RACE';
+/** 넷이 같아 결과 — 무승부가 있다(16칸이 다 차도 넷이 같은 줄이 없을 때) */
+export type QuartoWinner = 'ME' | 'PARTNER' | 'DRAW';
+
+/** 넷이 같아 수 한 줄 — 리플레이용. 첫 수(말 주기)는 place·piece 가 null */
+export interface QuartoMoveView {
+  moveNo: number;
+  userId: number;
+  mine: boolean;
+  place: number | null;
+  /** 이 수에 놓은 말 */
+  piece: number | null;
+  /** 이 수에 준 말 — 이긴 수·16번째 수는 null */
+  give: number | null;
+  createdAt: string;
+}
+
+/**
+ * 넷이 같아 한 판 — 4×4 판, 말 16개(4비트: 색·모양·크기·속). 백엔드 QuartoGameResponse 와 짝.
+ * 판정은 서버가 한다. 앱의 games/quarto 는 "놓으면 이기나" 미리보기뿐이다.
+ */
+export interface QuartoGame {
+  id: number;
+  status: SudokuStatus;
+  /** 칸 16개의 말 번호, 빈 칸 -1 (row * 4 + col) */
+  board: number[];
+  /** 지금 놓아야 할 말 — 내 차례면 "상대가 준 말", 아니면 "내가 준 말". 첫 수 전·끝난 뒤 null */
+  pendingPiece: number | null;
+  moveNo: number;
+  myTurn: boolean;
+  /** GIVE(첫 수: 말 주기만) · PLACE(놓고 주기) · null(내 차례 아님) */
+  myAction: 'GIVE' | 'PLACE' | null;
+  result: 'IN_PROGRESS' | 'WIN' | 'DRAW';
+  winnerUserId: number | null;
+  winner: QuartoWinner | null;
+  winLine: number[] | null;
+  /** 아직 아무도 안 쓴 말 — 서버가 계산해 내려준다 */
+  remainingPieces: number[];
+  moves: QuartoMoveView[];
+  partnerName?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+/** 넷이 같아 한 수 — 첫 수 {give} / 보통 {place, give} / 이기는 수·마지막 수 {place} */
+export interface QuartoMoveBody {
+  clientMoveId: string;
+  place?: number;
+  give?: number;
+  piece?: number;
+}
+
+export type GameTypeKey = 'SUDOKU' | 'OMOK' | 'CATCH_MIND' | 'PUZZLE_BATTLE' | 'WALL_RACE' | 'QUARTO';
 export interface GameReactionOption {
   key: string;
   emoji: string;

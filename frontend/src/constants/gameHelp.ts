@@ -4,7 +4,9 @@
  * <p>"처음 하는 사람에겐 너무 어렵다"(사용자, 2026-10-12). 규칙은 짧게(한 줄씩), 요령은 "다음에 뭘 하면 되나"가
  * 보이게 적는다. 처음 들어가면 한 번 저절로 뜨고, 화면의 "하는 법"으로 다시 본다(components/GameHelpSheet).
  */
-export type GameHelpKey = 'SUDOKU' | 'OMOK' | 'WALL_RACE' | 'CATCH_MIND' | 'PUZZLE';
+import { QUARTO_DISPLAY_NAME } from './quarto';
+
+export type GameHelpKey = 'SUDOKU' | 'OMOK' | 'WALL_RACE' | 'CATCH_MIND' | 'PUZZLE' | 'QUARTO';
 
 export interface GameHelp {
   title: string;
@@ -56,6 +58,21 @@ export const GAME_HELP: Record<GameHelpKey, GameHelp> = {
       '카드의 "도착까지 N칸"을 비교하세요. 내 쪽이 짧으면 달리고, 길면 벽으로 상대를 돌게 하세요.',
       '상대 말 바로 앞보다, 이미 있는 벽과 이어서 놓으면 훨씬 멀리 돌게 만들 수 있어요.',
       '벽은 10개뿐이에요. 처음부터 다 쓰지 말고 상대가 가까워졌을 때 쓰세요.',
+    ],
+  },
+  QUARTO: {
+    title: QUARTO_DISPLAY_NAME,
+    goal: '공통점이 있는 말 넷으로 한 줄(가로·세로·대각선)을 내가 채우면 이겨요.',
+    rules: [
+      '말은 16개예요. 색·모양(둥근/네모난)·크기(큰/작은)·속(꽉 찬/구멍 난)이 저마다 달라요.',
+      '내가 놓을 말은 상대가 골라 줘요. 놓고 나면 남은 말 중 하나를 골라 상대에게 건네요.',
+      '놓는 순간 넷이 같은 줄이 생기면 놓은 사람이 이겨요. 말이 누구 것인지는 없어요.',
+      '16칸이 다 찼는데 그런 줄이 없으면 무승부예요.',
+    ],
+    tips: [
+      '칸을 누르면 미리 놓아 볼 수 있어요. [확정] 전에는 칸도 말도 몇 번이고 바꿔도 돼요.',
+      '건넬 말을 고를 땐, 상대가 어디에 놓아도 줄이 안 생기는 말인지 하나하나 살펴보세요.',
+      '셋이 같은 줄이 여러 개 생기면 건넬 수 있는 안전한 말이 금방 바닥나요.',
     ],
   },
   CATCH_MIND: {

@@ -16,6 +16,8 @@ import type {
   PuzzleBattleBegin,
   PuzzleBattleGame,
   PuzzleBattleRun,
+  QuartoGame,
+  QuartoMoveBody,
   SudokuDifficulty,
   SudokuGame,
   WallRaceGame,
@@ -109,6 +111,24 @@ export const omokApi = {
   record: () => unwrap(apiClient.get<ApiResponse<GameRecord>>('/games/omok/record')),
   /** 끝난 판 최근 20개(승패 포함) */
   history: () => unwrap(apiClient.get<ApiResponse<OmokGame[]>>('/games/omok/history')),
+};
+
+/**
+ * 넷이 같아 — 길막기처럼 서버가 판정한다. 한 수(놓기+주기)는 요청 하나이고, clientMoveId 가 같으면
+ * 서버는 다시 두지 않고 저장된 결과를 돌려준다(타임아웃 뒤 재전송이 안전하다). 경로의 quarto 는 내부 키다.
+ */
+export const quartoApi = {
+  /** 진행 중인 판 — 없으면 null */
+  current: () => unwrap(apiClient.get<ApiResponse<QuartoGame | null>>('/games/quarto/current')),
+  /** 새 판 — 선공(첫 말 주기)은 상대. 진행 중인 판이 있으면 그걸 돌려준다 */
+  start: () => unwrap(apiClient.post<ApiResponse<QuartoGame>>('/games/quarto')),
+  move: (id: number, body: QuartoMoveBody) =>
+    unwrap(apiClient.post<ApiResponse<QuartoGame>>(`/games/quarto/${id}/moves`, body)),
+  giveUp: (id: number) => unwrap(apiClient.post<ApiResponse<void>>(`/games/quarto/${id}/give-up`)),
+  /** 전적 — 끝낸 판 전부(무승부 포함) */
+  record: () => unwrap(apiClient.get<ApiResponse<GameRecord>>('/games/quarto/record')),
+  /** 끝난 판 최근 20개 — 수 기록 포함 */
+  history: () => unwrap(apiClient.get<ApiResponse<QuartoGame[]>>('/games/quarto/history')),
 };
 
 /**

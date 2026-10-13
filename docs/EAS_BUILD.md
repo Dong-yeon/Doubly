@@ -468,6 +468,8 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
 - `fingerprint.config.js` 의 `fileHookTransform`(동작 권한 문구를 해시에서 false 로 세는 훅) 지우기 — 1.0.7 iOS 가
   ITMS-90683 으로 거절돼 문구를 넣으면서, 이미 나간 Android 1.0.7 에 OTA 가 끊기지 않게 임시로 둔 것(2026-10-06).
   다음 빌드는 어차피 런타임이 바뀌므로 그때 지운다.
+- `package.json` 에 `"verify:quarto": "node --experimental-strip-types scripts/verify-quarto.mjs"` 등록 —
+  넷이 같아 미리보기 판정 검증(2026-10-13). 그때까지는 그 명령을 직접 돌린다.
 
 ### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
 

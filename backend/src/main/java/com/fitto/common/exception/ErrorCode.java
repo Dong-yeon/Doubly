@@ -141,6 +141,15 @@ public enum ErrorCode {
     // 429 가 아니라 409 다 — 429 는 PlanGuard 의 "사용 한도" 의미라 앱이 결제 안내로 읽을 수 있다
     GAME_NUDGE_MY_TURN(HttpStatus.CONFLICT, "지금은 내 차례예요. 두고 나면 상대에게 알림이 가요."),
     GAME_NUDGE_TOO_SOON(HttpStatus.CONFLICT, "오늘은 이미 알렸어요. 내일 다시 찌를 수 있어요."),
+    /* 판은 있는데 내 커플의 판이 아니다 — 넷이 같아는 404 로 숨기지 않고 403 으로 가른다 */
+    GAME_NOT_MEMBER(HttpStatus.FORBIDDEN, "이 판에 참여한 사람만 둘 수 있어요."),
+    /* 넷이 같아 — 앱이 형식을 미리 맞춰 보내므로 이 거절들은 대부분 앱 버그다. 어디가 틀렸는지 보이게 원인마다 가른다 */
+    QUARTO_MOVE_SHAPE(HttpStatus.BAD_REQUEST, "수 형식이 맞지 않아요. 판을 다시 불러와 주세요."),
+    QUARTO_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "칸이나 말 번호가 잘못됐어요."),
+    QUARTO_CELL_OCCUPIED(HttpStatus.BAD_REQUEST, "이미 말이 놓인 칸이에요."),
+    QUARTO_PIECE_MISMATCH(HttpStatus.CONFLICT, "받은 말과 다른 말이에요. 판을 다시 불러와 주세요."),
+    QUARTO_PIECE_USED(HttpStatus.UNPROCESSABLE_ENTITY, "이미 쓴 말은 줄 수 없어요."),
+    QUARTO_GIVE_ON_WIN(HttpStatus.UNPROCESSABLE_ENTITY, "이기는 수에는 말을 줄 수 없어요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),
