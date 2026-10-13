@@ -426,3 +426,86 @@
 **결론**: 공통 프레임워크(단일 테이블 상속 + `GameCouples`·`GameChatCards`·`GameQuiet`·재촉/리마인더/만료/스트릭)가 있고
 판정도 서버에 있으므로, 새 턴제 게임은 종목 컬럼 + 규칙 + 화면만 얹으면 된다. 다만 요구된 "조건부 UPDATE·멱등키"는
 길막기에 없는 것이라, 넷이 같아는 **길막기와 같은 행 잠금**을 쓰고 멱등키는 새 수 테이블에서만 지킨다(11절).
+
+---
+
+## 11. 넷이 같아(내부 키 `QUARTO`) — 2026-10-13 추가
+
+사용자에게 보이는 이름은 **임시값 "넷이 같아(가칭)"** 이다. 원작 이름은 상표 문제로 화면·푸시·문서 본문에 쓰지 않는다.
+이름은 두 곳에만 있다 — 앱 `F/constants/quarto.ts` 의 `QUARTO_DISPLAY_NAME`, 서버 `B/game/domain/QuartoGame.java` 의
+`DISPLAY_NAME`(푸시·채팅 카드·재촉 문구). **이름을 정하면 둘을 같이 바꾼다.** 웹 주소는 `game/four`(내부 키를 주소창에 내지 않는다).
+
+### 11-1. 규칙 요약
+
+- 4×4 판, 말 16개. 말 = 4비트 정수 0~15 — bit0 색(잉크/호박), bit1 모양(둥근/네모), bit2 크기(큰/작은), bit3 속(꽉 참/구멍).
+- 선공은 길막기·오목과 같이 **판을 연 사람의 상대**다. 0 번째 수는 선공의 **말 주기뿐**이다.
+- 한 수 = 상대가 준 말을 빈 칸에 놓기 + (안 끝났으면) 남은 말 하나를 상대에게 주기. **둘을 요청 하나로** 받는다.
+- 놓은 직후, 그 칸을 지나는 줄(가로·세로·대각선 10줄 중 해당하는 것)이 넷 다 차고
+  `(a&b&c&d) != 0 || ((~a&~b&~c&~d) & 0xF) != 0` 이면 **놓은 사람이 이긴다**. "선언" 단계 없이 서버가 자동 판정.
+- 16번째 말을 놓아도 이긴 줄이 없으면 무승부. 2×2 정사각형 변형은 없다.
+
+### 11-2. API (`/api/v1/games/quarto`)
+
+| 메서드 | 경로 | 비고 |
+|---|---|---|
+| GET | `/current` | 진행 중인 판 또는 null |
+| POST | `/` | 새 판(진행 중이면 그 판). 상대에게 푸시 |
+| POST | `/{id}/moves` | `{clientMoveId, place?, give?, piece?}` — 첫 수 `{give}` / 보통 `{place, give}` / 이기는 수·16번째 `{place}`. 15번째 놓기 뒤 give 는 생략 가능(서버가 남은 한 말로 채움, 보내면 같은 말이어야 함). `piece` 는 선택 — 보내면 받은 말과 대조 |
+| POST | `/{id}/give-up` | 접기(기록에 안 남음), 상대에게 푸시 |
+| GET | `/record` | 끝낸 판 전부의 승·패·무 |
+| GET | `/history` | 끝난 판 최근 20개 + 수 기록 |
+
+거절 코드(전부 다르다): 판 없음 `GAME_NOT_FOUND` 404 · **판은 있는데 내 커플이 아님 `GAME_NOT_MEMBER` 403**(길막기는 404 로 숨긴다) ·
+끝난 판 `GAME_NOT_IN_PROGRESS` 409 · 차례 아님 `GAME_NOT_YOUR_TURN` 409 · 형식 `QUARTO_MOVE_SHAPE` 400 · 범위 `QUARTO_OUT_OF_RANGE` 400 ·
+채워진 칸 `QUARTO_CELL_OCCUPIED` 400 · 받은 말과 다름 `QUARTO_PIECE_MISMATCH` 409 · 이미 쓴 말 `QUARTO_PIECE_USED` 422 ·
+이기는 수에 give `QUARTO_GIVE_ON_WIN` 422.
+
+### 11-3. 저장 · state
+
+- `couple_games`(game_type `QUARTO`) 에 V139 컬럼: `quarto_board`(16자, 칸마다 `0`~`f` 또는 `.`)·`quarto_pending`·`quarto_move_no`·
+  `quarto_winner`('1'/'2')·`quarto_win_line`("0,5,10,15"). **차례는 저장하지 않는다**(수 번호 홀짝). **남은 말도 저장하지 않는다**(판+받은 말로 계산).
+- 수 기록 `quarto_moves`(V139): `move_no`·`user_id`·`place`·`give`·`client_move_id`·`created_at`. unique `(game_id, move_no)`·`(game_id, client_move_id)`.
+  `user_id` 에 users FK 는 걸지 않았다(couple_games 가 사람을 '1'/'2' 로 적는 것과 같은 이유). **couple_games 의 첫 자식 테이블**이라
+  `RelationRecordPurger`·`UserDataPurger` 에서 판보다 먼저 지운다(5-3 의 "자식이 없다"는 이제 틀린 말이다).
+- 응답(`QuartoGameResponse`): `board:int[16](-1 빈칸)`·`pendingPiece`·`moveNo`·`myTurn`·`myAction(GIVE|PLACE|null)`·
+  `result(IN_PROGRESS|WIN|DRAW)`·`winnerUserId`·`winner(ME|PARTNER|DRAW)`·`winLine`·`remainingPieces`(계산값)·`moves[]`(리플레이)·`partnerName`.
+  요청 형식의 uuid 는 이 앱의 user id 가 Long 이라 `winnerUserId` 도 Long 이다.
+
+### 11-4. 신뢰성 — 길막기와 다른 두 가지
+
+- **동시성**: 길막기와 같은 행 잠금(`findByIdForUpdate`)이다(요청엔 "조건부 UPDATE·version"이 있었지만 길막기가 그걸 쓰지 않아 같은 방식을 따름).
+  구성원 확인은 판 **엔티티를 읽지 않는** `findCoupleIdById` 로 한다 — 잠그기 전에 엔티티를 영속성 컨텍스트에 올리면 잠금 조회가 낡은 상태를
+  돌려줘 동시에 온 두 번째 수가 "아직 내 차례"로 보인다. `(game_id, move_no)` unique 는 마지막 안전장치.
+- **멱등키**: 같은 `clientMoveId` 가 다시 오면 새로 두지 않고 지금 판을 돌려준다. 끝난 판·차례 검사보다 **먼저** 보므로 이긴 수의 재전송도 409 가
+  아니라 승리 결과로 돌아온다. 앱은 확정마다 키 하나를 만들고, 응답 없이 끊기면(status 0) 같은 키로 한 번 더 보낸다.
+- 알림·카드: 판 열기·차례(2분 조용함, `GameQuiet.TURN`)·결과(승/무)·접기 푸시, 결과 채팅 카드, 재촉·리마인더·7일 만료·스트릭은 공통 코드가 그대로 처리한다
+  (`GameNudgeService.labelOf/linkOf` 에 한 줄씩 추가).
+
+### 11-5. 앱
+
+- 허브 `MiniGamesScreen` 카드(길막기 다음) → `F/screens/home/QuartoScreen.tsx`. 갱신은 길막기와 같이 포커스 + 커플 소켓 `GAME`.
+- 흐름: 빈 칸 탭 → 미리보기(반투명) → 건넬 말 고르기 → [확정] 한 번에 API 1회. 확정 전엔 칸·말을 자유롭게 바꾼다.
+  놓으면 이기는 칸이면 줄을 칠하고 건넬 말 줄을 숨긴 채 **[놓고 승리]**(판단은 `F/games/quarto` 미리보기). 15번째는 "저절로 건네져요", 16번째는 "마지막 칸에 놓기".
+- 건넬 말 줄에는 "이 말을 주면 상대가 이긴다" 경고를 **하지 않는다**(게임의 재미).
+- 끝나면 이긴 줄 강조 + 공통 속성 글("모두 작은 말"), 복기(수마다 "두리가 1행 2열에 놓고 ○○ 말을 건넸어요").
+- 말 비주얼: 차트 색 짝 `chart1`(잉크)/`chart3`(호박) — 앱에 secondary 토큰이 없고, primary 는 포인트 색 테마 14종을 따라 바뀌어 둘째 색과
+  겹칠 수 있어서다. 색에만 기대지 않게 둘째 색 말엔 가운데 점을 찍는다. 모양·크기·속은 형태로 구분된다.
+- 하는 법(`GameHelpSheet` `QUARTO`), 반응 바(`GameTypeKey` 에 `QUARTO`), 재촉 버튼 공통.
+- 아이콘은 이미 서브셋에 있는 `grid` 를 썼다(스도쿠와 같은 아이콘) — 이 환경엔 fontTools(Python)가 없어 새 글리프를 넣으면 빈 칸으로 나온다.
+
+### 11-6. 검증한 것
+
+- 서버: `QuartoRulesTest` 17(줄 10 × 속성 4 × 값 0/1 = 80 케이스, 공통 없음, 셋만 찬 줄, 무승부, 첫 수, 15번째 자동 give, 16번째, 입력 오류 각각) ·
+  `QuartoFlowTest` 12(원인별 거절, 403, 승리+채팅 카드+전적, 무승부, 같은 clientMoveId 재전송·이긴 수 재전송, 두 스레드 동시 제출 → 1건, 접기, 관계 삭제).
+  전체 백엔드 테스트 통과(H2).
+- 로컬 PostgreSQL 에 V139 적용 확인, HTTP 로 409/400/422/403 확인.
+- 앱: `tsc`, 바뀐 파일 lint, `verify-quarto.mjs`(621 검사), 웹 export. 웹 미리보기(로컬 백엔드)에서 판·건넬 말 줄·놓고 승리 미리보기·승리 결과·복기·
+  허브 카드·상대 수의 소켓 반영을 다크·라이트로 확인.
+
+### 11-7. 남은 일
+
+- **이름 확정**(가칭 떼기) — 앱·서버 상수 둘.
+- 실기기(Android·iOS) 확인 — 터치 크기(칸·건넬 말 16칸 줄), 햅틱, 푸시 탭 → `game/four` 딥링크 이동.
+- 운영 PostgreSQL 배포 후 확인. 배포 순서는 **서버 먼저**(앱 허브는 서버가 모르는 경로여도 다른 카드를 비우지 않게 처리해 두었다).
+- 서버 문구에 이름이 박힌 곳과 앱 상수가 어긋나지 않게 할 동기화 테스트는 아직 없다(이름이 확정되면 `PlanFeatureSyncTest` 식으로 붙일 만하다).
+- `npm run verify:quarto` 등록은 다음 네이티브 빌드 때(`docs/EAS_BUILD.md`).
