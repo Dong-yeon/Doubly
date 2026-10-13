@@ -109,6 +109,21 @@ class CoupleEmojiGenerateIdempotencyTest {
         verify(service, times(4)).prepare(eq(7L), any());
     }
 
+    /** 다시 그리기도 같은 키면 세트 잔량을 한 번만 쓴다 — 세 번뿐인 횟수가 더블탭에 날아가면 안 된다. */
+    @Test
+    void 다시_그리기도_같은_키는_한_번만_쓴다() {
+        CoupleEmojiService.RegenTicket ticket = new CoupleEmojiService.RegenTicket(
+                1L, 7L, "batch-1", CoupleEmojiEmotion.HAPPY, 10L, 8L, SOURCE, "facts", true);
+        when(service.prepareRegen(7L, "batch-1", CoupleEmojiEmotion.HAPPY)).thenReturn(ticket);
+        var request = new com.fitto.coupleemoji.dto.RegenerateCoupleEmojiRequest(CoupleEmojiEmotion.HAPPY, "regen-key-01");
+
+        String first = controller.regenerate(USER, "batch-1", request).data().jobId();
+        String second = controller.regenerate(USER, "batch-1", request).data().jobId();
+
+        assertThat(second).isEqualTo(first);
+        verify(service, times(1)).prepareRegen(7L, "batch-1", CoupleEmojiEmotion.HAPPY);
+    }
+
     @Test
     void 접수_중인_같은_키는_409() {
         assertThat(jobs.claimRequest(7L, "couple-emoji", "req-pending-1", "other-source")).isEmpty();

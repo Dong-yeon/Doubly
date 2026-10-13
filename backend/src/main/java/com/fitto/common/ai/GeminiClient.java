@@ -261,7 +261,32 @@ public class GeminiClient {
         return countUsage(userId, feature, true);
     }
 
+    /**
+     * 이미지 생성의 <b>안전망만</b> 센다 — 플랜 한도·크레딧은 건드리지 않는다.
+     *
+     * <p>이미 다른 것으로 값을 치른 호출용이다: 산 세트 안의 다시 그리기(세트 잔량이 따로 센다), 커플당 첫 세트 무료.
+     * 서비스 전체·사용자별 하루 상한은 그대로 지난다 — 그 둘은 결제와 무관한 사고 방지선이다.
+     * 되돌릴 때는 {@link #refund(Long, Feature, PlanGuard.Charge)} 에 {@link PlanGuard.Charge#NONE} 을 넘긴다.
+     */
+    public void requireImageConfiguredAndCountBackstop(Long userId) {
+        if (!properties.isImageConfigured()) {
+            throw new BusinessException(ErrorCode.AI_NOT_CONFIGURED);
+        }
+        countBackstop(userId, () -> PlanGuard.Charge.NONE);
+    }
+
     private PlanGuard.Charge countUsage(Long userId, Feature feature, boolean allowCredit) {
+        return countBackstop(userId, () -> {
+            if (allowCredit) {
+                return planGuard.consumeOrCredit(userId, feature);
+            }
+            planGuard.consume(userId, feature);
+            return PlanGuard.Charge.QUOTA;
+        });
+    }
+
+    /** 안전망 두 겹을 먼저 보고(부작용 없이) → 플랜 단계 → 안전망 커밋. 순서의 이유는 GeminiClientQuotaTest. */
+    private PlanGuard.Charge countBackstop(Long userId, java.util.function.Supplier<PlanGuard.Charge> planStep) {
         Quota serviceWide = Quota.perDay(properties.getDailyLimitTotal());
         if (usageCounter.peekGlobal(Feature.AI_TOTAL, serviceWide) >= serviceWide.limit()) {
             log.warn("AI 서비스 전체 일일 한도 도달 — limit={}", serviceWide.limit());
@@ -273,13 +298,7 @@ public class GeminiClient {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);
         }
 
-        PlanGuard.Charge charge;
-        if (allowCredit) {
-            charge = planGuard.consumeOrCredit(userId, feature);
-        } else {
-            planGuard.consume(userId, feature);
-            charge = PlanGuard.Charge.QUOTA;
-        }
+        PlanGuard.Charge charge = planStep.get();
 
         if (usageCounter.increment(userId, Feature.AI_TOTAL, backstop) > backstop.limit()) {
             throw new BusinessException(ErrorCode.AI_DAILY_LIMIT_EXCEEDED);

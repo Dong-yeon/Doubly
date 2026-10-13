@@ -35,11 +35,20 @@ public record CoupleEmojiResponse(
          * 얹으면 겹친다. 그 세트는 캐릭터 모션만 준다(docs/COUPLE_EMOJI_ANIMATION_SPEC_2026-09-28.md §5-4).
          */
         String promptVersion,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /**
+         * 이 장이 속한 세트의 남은 다시 그리기 횟수(V138) — 같은 세트의 장들은 같은 값을 갖는다. 앱이 "다시 그리기
+         * (남은 n번)"을 그린다. 모르면(세트 메타를 같이 읽지 않은 응답) null.
+         */
+        Integer regenRemaining
 ) {
     public static CoupleEmojiResponse from(CoupleEmoji e) {
+        return from(e, null);
+    }
+
+    public static CoupleEmojiResponse from(CoupleEmoji e, Integer regenRemaining) {
         return new CoupleEmojiResponse(e.getId(), e.getBatchId(), e.getEmotion(), e.getEmotion().label(),
                 e.getImageUrl(), e.getSubjectUserId(), e.getCreatedBy(), e.isMoodVisible(),
-                e.getEmotion().moodEmoji(), e.getPromptVersion(), e.getCreatedAt());
+                e.getEmotion().moodEmoji(), e.getPromptVersion(), e.getCreatedAt(), regenRemaining);
     }
 }

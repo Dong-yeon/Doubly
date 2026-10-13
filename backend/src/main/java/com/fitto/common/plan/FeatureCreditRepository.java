@@ -13,6 +13,14 @@ public interface FeatureCreditRepository extends JpaRepository<FeatureCredit, Lo
 
     Optional<FeatureCredit> findByTransactionId(String transactionId);
 
+    boolean existsByTransactionIdIn(java.util.Collection<String> transactionIds);
+
+    /** 첫 1회 무료를 되돌릴 때 — 쓴 사람의 행과, 그 사람이 상대 몫으로 남긴 표지 행. */
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from FeatureCredit c where c.transactionId = :transactionId or c.productId = :markerProduct")
+    int deleteWelcome(@Param("transactionId") String transactionId, @Param("markerProduct") String markerProduct);
+
     /**
      * 아직 남은 묶음 — 먼저 산 것부터 쓴다.
      *

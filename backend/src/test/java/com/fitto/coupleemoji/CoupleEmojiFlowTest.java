@@ -12,6 +12,7 @@ import com.fitto.common.ai.GeneratedImage;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.common.plan.Feature;
+import com.fitto.common.plan.PlanGuard;
 import com.fitto.common.upload.CloudinaryImageDeleter;
 import com.fitto.common.upload.CloudinaryImageFetcher;
 import com.fitto.common.upload.CloudinaryImageUploader;
@@ -83,6 +84,7 @@ class CoupleEmojiFlowTest {
     @Autowired ChatService chatService;
     @Autowired RelationRecordPurger purger;
     @Autowired CoupleEmojiSetRepository setRepository;
+    @Autowired PlanGuard planGuard;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired ObjectMapper objectMapper;
     @PersistenceContext EntityManager em;
@@ -233,6 +235,8 @@ class CoupleEmojiFlowTest {
         connectCouple(a, b);
         doThrow(new BusinessException(ErrorCode.PLAN_LIMIT_EXCEEDED))
                 .when(geminiClient).requireImageConfiguredAndCharge(a, Feature.AI_COUPLE_EMOJI);
+        // 첫 1회 무료도 이미 썼다 — 남은 길이 없을 때 거절이 원본을 치우는지 본다
+        assertThat(planGuard.claimWelcome(a, b, Feature.AI_COUPLE_EMOJI)).isTrue();
 
         assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)))
                 .isInstanceOf(BusinessException.class)
@@ -633,5 +637,205 @@ class CoupleEmojiFlowTest {
                 "select count(*) from couple_emoji_sets where relation_id = :r").setParameter("r", relationId)
                 .getSingleResult();
         assertThat(sets.longValue()).isZero();
+    }
+
+    // ---- 다시 그리기 (세트당 3번, docs/EMOJI_12_REGEN_2026-10-13.md) ----
+
+    /** 세트 하나를 실제 생성 경로로 만든다 — 요청 상한 안쪽의 정상 세트(다시 그리기 3번). */
+    private CoupleEmojiBatchResponse generateSet(Long userId) {
+        return service.generate(service.prepare(userId, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)));
+    }
+
+    private CoupleEmojiResponse regenerate(Long userId, String batchId, CoupleEmojiEmotion emotion) {
+        return service.regenerate(service.prepareRegen(userId, batchId, emotion));
+    }
+
+    @Test
+    void 다시_그리면_새_장이_옛_장을_대신하고_보낸_메시지는_옛_그림을_지킨다() {
+        Long a = register("ce-regen-a@fitto.com");
+        Long b = register("ce-regen-b@fitto.com");
+        Long relationId = connectCouple(a, b);
+        CoupleEmojiBatchResponse batch = generateSet(a);
+        CoupleEmojiResponse happy = batch.emojis().stream()
+                .filter(e -> e.emotion() == CoupleEmojiEmotion.HAPPY).findFirst().orElseThrow();
+        chatService.send(b, relationId, new SendMessageRequest(
+                MessageType.COUPLE_EMOJI, String.valueOf(happy.id()), null, null, null, null));
+
+        // 상대(b)도 다시 그릴 수 있다 — 세트는 관계의 것
+        CoupleEmojiResponse fresh = regenerate(b, batch.batchId(), CoupleEmojiEmotion.HAPPY);
+
+        assertThat(fresh.id()).isNotEqualTo(happy.id());
+        assertThat(fresh.batchId()).isEqualTo(batch.batchId());
+        assertThat(fresh.imageUrl()).isNotEqualTo(happy.imageUrl());
+        assertThat(fresh.regenRemaining()).isEqualTo(CoupleEmojiSet.REGEN_PER_SET - 1);
+        // 트레이에는 새 장만 — 같은 감정이 둘 보이지 않는다
+        assertThat(service.list(a)).filteredOn(e -> e.emotion() == CoupleEmojiEmotion.HAPPY)
+                .extracting(CoupleEmojiResponse::id).containsExactly(fresh.id());
+        assertThat(service.list(a))
+                .allSatisfy(e -> assertThat(e.regenRemaining()).isEqualTo(CoupleEmojiSet.REGEN_PER_SET - 1));
+        Number replaces = (Number) em.createNativeQuery("select replaces_id from couple_emojis where id = :id")
+                .setParameter("id", fresh.id()).getSingleResult();
+        assertThat(replaces.longValue()).isEqualTo(happy.id());
+        // 이미 보낸 메시지는 옛 그림 그대로 — URL 을 복사해 들고 있고, 옛 파일은 지우지 않는다
+        assertThat(chatService.getMessages(a, relationId, null).get(0).imageUrl()).isEqualTo(happy.imageUrl());
+        verify(imageDeleter, never()).deleteAll(List.of(happy.imageUrl()));
+        // 참조는 원본 사진(이미 지웠다)이 아니라 같은 세트의 다른 장 — 대신할 장(HAPPY)이 아닌 것
+        List<String> others = batch.emojis().stream().filter(e -> !e.id().equals(happy.id()))
+                .map(CoupleEmojiResponse::imageUrl).toList();
+        verify(imageFetcher).fetch(org.mockito.ArgumentMatchers.argThat(others::contains));
+        verify(imageFetcher, never()).fetch(happy.imageUrl());
+    }
+
+    @Test
+    void 다시_그리기는_세트당_세_번이고_다_쓰면_그리지_않는다() {
+        Long a = register("ce-regen3-a@fitto.com");
+        Long b = register("ce-regen3-b@fitto.com");
+        connectCouple(a, b);
+        CoupleEmojiBatchResponse batch = generateSet(a);
+        for (int i = 0; i < CoupleEmojiSet.REGEN_PER_SET; i++) {
+            regenerate(a, batch.batchId(), CoupleEmojiEmotion.SAD);
+        }
+
+        assertThatThrownBy(() -> service.prepareRegen(a, batch.batchId(), CoupleEmojiEmotion.SAD))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.COUPLE_EMOJI_REGEN_EXHAUSTED);
+        verify(geminiClient, times(WITHIN_LIMIT.size() + CoupleEmojiSet.REGEN_PER_SET))
+                .generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
+        // 다시 그리기는 플랜 한도·크레딧을 건드리지 않는다 — 안전망만 센다
+        verify(geminiClient, times(1)).requireImageConfiguredAndCharge(any(), any());
+        verify(geminiClient, times(CoupleEmojiSet.REGEN_PER_SET)).requireImageConfiguredAndCountBackstop(a);
+    }
+
+    @Test
+    void 다시_그리기가_실패하면_횟수를_돌려준다() {
+        Long a = register("ce-regenfail-a@fitto.com");
+        Long b = register("ce-regenfail-b@fitto.com");
+        connectCouple(a, b);
+        CoupleEmojiBatchResponse batch = generateSet(a);
+        doThrow(new BusinessException(ErrorCode.AI_RATE_LIMITED))
+                .when(geminiClient).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
+
+        CoupleEmojiService.RegenTicket ticket = service.prepareRegen(a, batch.batchId(), CoupleEmojiEmotion.LOVE);
+        assertThat(setRepository.findById(batch.batchId()).orElseThrow().regenRemaining())
+                .isEqualTo(CoupleEmojiSet.REGEN_PER_SET - 1);
+        assertThatThrownBy(() -> service.regenerate(ticket)).isInstanceOf(BusinessException.class);
+
+        assertThat(setRepository.findById(batch.batchId()).orElseThrow().regenRemaining())
+                .isEqualTo(CoupleEmojiSet.REGEN_PER_SET);
+        verify(geminiClient).refund(a, Feature.AI_COUPLE_EMOJI, PlanGuard.Charge.NONE);
+        // 옛 장은 그대로 살아 있다
+        assertThat(service.list(a)).extracting(CoupleEmojiResponse::emotion).contains(CoupleEmojiEmotion.LOVE);
+    }
+
+    /** 만들다 실패한 칸은 다시 그리기로 채운다 — 보충받은 횟수가 그 몫이다(§8-D5). */
+    @Test
+    void 빈_칸은_다시_그리기로_채운다() {
+        Long a = register("ce-fill-a@fitto.com");
+        Long b = register("ce-fill-b@fitto.com");
+        connectCouple(a, b);
+        failOnly(CoupleEmojiEmotion.SLEEPY, new BusinessException(ErrorCode.AI_IMAGE_REJECTED));
+        CoupleEmojiBatchResponse batch = generateSet(a);
+        assertThat(batch.failedEmotions()).containsExactly("SLEEPY");
+        when(geminiClient.generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList()))
+                .thenReturn(new GeneratedImage(new byte[] {7}, "image/png"));
+
+        CoupleEmojiResponse filled = regenerate(a, batch.batchId(), CoupleEmojiEmotion.SLEEPY);
+
+        assertThat(filled.emotion()).isEqualTo(CoupleEmojiEmotion.SLEEPY);
+        assertThat(filled.batchId()).isEqualTo(batch.batchId());
+        // 보충 1 + 기본 3 에서 하나 썼다
+        assertThat(filled.regenRemaining()).isEqualTo(CoupleEmojiSet.REGEN_PER_SET);
+        assertThat(service.list(a)).filteredOn(e -> e.batchId().equals(batch.batchId())).hasSize(WITHIN_LIMIT.size());
+    }
+
+    @Test
+    void 다른_커플의_세트와_예전_세트는_다시_그릴_수_없다() {
+        Long a = register("ce-regenx-a@fitto.com");
+        Long b = register("ce-regenx-b@fitto.com");
+        Long c = register("ce-regenx-c@fitto.com");
+        Long d = register("ce-regenx-d@fitto.com");
+        connectCouple(a, b);
+        connectCouple(c, d);
+        CoupleEmojiBatchResponse batch = generateSet(a);
+
+        assertThatThrownBy(() -> service.prepareRegen(c, batch.batchId(), CoupleEmojiEmotion.HAPPY))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.COUPLE_EMOJI_NOT_FOUND);
+
+        // V138 백필 세트(예전 6장 규칙)는 다시 그리기 0번
+        new TransactionTemplate(transactionManager).executeWithoutResult(s -> em.createNativeQuery(
+                "update couple_emoji_sets set charge_source = 'LEGACY', regen_total = 0 where batch_id = :b")
+                .setParameter("b", batch.batchId()).executeUpdate());
+        assertThatThrownBy(() -> service.prepareRegen(a, batch.batchId(), CoupleEmojiEmotion.HAPPY))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.COUPLE_EMOJI_REGEN_EXHAUSTED);
+    }
+
+    // ---- 커플당 첫 1회 무료 ----
+
+    @Test
+    void 막힌_커플은_첫_세트를_무료로_만들고_무료_세트에는_다시_그리기가_없다() {
+        Long a = register("ce-welcome-a@fitto.com");
+        Long b = register("ce-welcome-b@fitto.com");
+        connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.PLAN_UPGRADE_REQUIRED))
+                .when(geminiClient).requireImageConfiguredAndCharge(any(), eq(Feature.AI_COUPLE_EMOJI));
+        assertThat(service.welcomeAvailable(a)).isTrue();
+
+        CoupleEmojiService.GenerationTicket ticket =
+                service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT));
+        assertThat(ticket.charge()).isEqualTo(PlanGuard.Charge.WELCOME);
+        CoupleEmojiBatchResponse batch = service.generate(ticket);
+
+        assertThat(setRepository.findById(batch.batchId()).orElseThrow().getRegenTotal()).isZero();
+        // 커플당 한 번 — 나도, 상대도 다시 받지 못한다
+        assertThat(service.welcomeAvailable(a)).isFalse();
+        assertThat(service.welcomeAvailable(b)).isFalse();
+        assertThatThrownBy(() -> service.prepare(b, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PLAN_UPGRADE_REQUIRED);
+    }
+
+    @Test
+    void 무료로_한_장도_못_만들면_무료_자격이_돌아온다() {
+        Long a = register("ce-welcome2-a@fitto.com");
+        Long b = register("ce-welcome2-b@fitto.com");
+        connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.PLAN_UPGRADE_REQUIRED))
+                .when(geminiClient).requireImageConfiguredAndCharge(any(), eq(Feature.AI_COUPLE_EMOJI));
+        // 목이 아니라 진짜 되돌림 경로를 태운다 — GeminiClient.refund → PlanGuard.refund(WELCOME)
+        org.mockito.Mockito.doAnswer(inv -> {
+            planGuard.refund(inv.getArgument(0), inv.getArgument(1), (PlanGuard.Charge) inv.getArgument(2));
+            return null;
+        }).when(geminiClient).refund(any(), any(), any(PlanGuard.Charge.class));
+        doThrow(new BusinessException(ErrorCode.AI_IMAGE_REJECTED))
+                .when(geminiClient).generateImageInBackground(any(), eq(Feature.AI_COUPLE_EMOJI), anyList());
+
+        assertThatThrownBy(() -> service.generate(
+                service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT))))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(service.welcomeAvailable(a)).isTrue();
+        assertThat(service.welcomeAvailable(b)).isTrue();
+    }
+
+    /** 무료는 결제로 풀리는 거절(402)에만 — PRO 남용 방지(429)는 무료로 풀지 않는다. */
+    @Test
+    void 남용_방지_한도는_무료로_풀지_않는다() {
+        Long a = register("ce-welcome3-a@fitto.com");
+        Long b = register("ce-welcome3-b@fitto.com");
+        connectCouple(a, b);
+        doThrow(new BusinessException(ErrorCode.USAGE_LIMIT_EXCEEDED))
+                .when(geminiClient).requireImageConfiguredAndCharge(any(), eq(Feature.AI_COUPLE_EMOJI));
+
+        assertThatThrownBy(() -> service.prepare(a, new GenerateCoupleEmojiRequest(SOURCE_URL, null, WITHIN_LIMIT)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.USAGE_LIMIT_EXCEEDED);
+        assertThat(service.welcomeAvailable(a)).isTrue();
     }
 }

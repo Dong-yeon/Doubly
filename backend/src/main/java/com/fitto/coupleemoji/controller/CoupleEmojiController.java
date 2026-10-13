@@ -9,6 +9,7 @@ import com.fitto.common.security.AuthUser;
 import com.fitto.common.upload.UploadSignatureResponse;
 import com.fitto.coupleemoji.dto.CoupleEmojiResponse;
 import com.fitto.coupleemoji.dto.GenerateCoupleEmojiRequest;
+import com.fitto.coupleemoji.dto.RegenerateCoupleEmojiRequest;
 import com.fitto.coupleemoji.service.CoupleEmojiService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -89,6 +90,47 @@ public class CoupleEmojiController {
     }
 
     private static final String JOB_LABEL = "couple-emoji";
+    private static final String REGEN_LABEL = "couple-emoji-regen";
+
+    /**
+     * 세트 안에서 한 장 다시 그리기 — 접수증(202 + jobId), 결과는 새 장 하나({@code CoupleEmojiResponse}).
+     * 세트의 다시 그리기 잔량을 쓰고 플랜 한도·크레딧은 건드리지 않는다(서비스 prepareRegen 주석).
+     */
+    @PostMapping("/batches/{batchId}/regenerate")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<AiJobResponse> regenerate(@AuthenticationPrincipal AuthUser user,
+                                                 @PathVariable String batchId,
+                                                 @Valid @RequestBody RegenerateCoupleEmojiRequest request) {
+        String requestId = request.requestId();
+        String payload = batchId + ":" + request.emotion();
+        if (requestId != null) {
+            var earlier = aiJobService.claimRequest(user.id(), REGEN_LABEL, requestId, payload);
+            if (earlier.isPresent()) {
+                if (earlier.get().pending()) {
+                    throw new BusinessException(ErrorCode.AI_REQUEST_IN_PROGRESS);
+                }
+                return ApiResponse.success(new AiJobResponse(earlier.get().jobId()), "다시 그리고 있어요.");
+            }
+        }
+        CoupleEmojiService.RegenTicket ticket;
+        try {
+            ticket = coupleEmojiService.prepareRegen(user.id(), batchId, request.emotion());
+        } catch (RuntimeException e) {
+            if (requestId != null) aiJobService.releaseRequest(user.id(), REGEN_LABEL, requestId);
+            throw e;
+        }
+        String jobId = aiJobService.submit(user.id(), REGEN_LABEL,
+                () -> coupleEmojiService.regenerate(ticket),
+                () -> coupleEmojiService.abandonRegen(ticket));
+        if (requestId != null) aiJobService.bindRequest(user.id(), REGEN_LABEL, requestId, jobId, payload);
+        return ApiResponse.success(new AiJobResponse(jobId), "다시 그리고 있어요.");
+    }
+
+    /** 커플당 첫 1회 무료가 남았나 — 만들기 화면이 잠금 대신 "첫 세트는 무료"를 그린다. */
+    @GetMapping("/welcome")
+    public ApiResponse<java.util.Map<String, Boolean>> welcome(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(java.util.Map.of("available", coupleEmojiService.welcomeAvailable(user.id())));
+    }
 
     @GetMapping
     public ApiResponse<List<CoupleEmojiResponse>> list(@AuthenticationPrincipal AuthUser user) {

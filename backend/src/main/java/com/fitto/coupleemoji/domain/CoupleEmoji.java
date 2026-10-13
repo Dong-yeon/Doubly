@@ -85,10 +85,18 @@ public class CoupleEmoji {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * 다시 그린 장이면 대신한 장의 id(V138). 옛 장은 숨길 뿐 지우지 않는다 — 이미 보낸 채팅 메시지가 옛 URL 을
+     * 복사해 들고 있어 대화에는 옛 그림이 남아야 한다.
+     */
+    @Column(name = "replaces_id")
+    private Long replacesId;
+
     @Builder
     private CoupleEmoji(Long relationId, Long createdBy, Long subjectUserId, String batchId,
                         CoupleEmojiEmotion emotion, String imageUrl, String promptVersion,
-                        String identityFacts, Boolean bgRemoved) {
+                        String identityFacts, Boolean bgRemoved, Long replacesId) {
+        this.replacesId = replacesId;
         this.relationId = relationId;
         this.createdBy = createdBy;
         this.subjectUserId = subjectUserId;
