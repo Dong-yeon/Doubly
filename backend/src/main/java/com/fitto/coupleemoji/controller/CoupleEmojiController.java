@@ -47,7 +47,7 @@ public class CoupleEmojiController {
 
     /**
      * 세트 생성 — 접수증(202 + jobId)을 돌려주고 앱은 {@code GET /ai/jobs/{jobId}} 로 결과를 가져간다
-     * (다른 AI 기능과 같은 규칙). 6장이 약 1분 걸리므로 앱은 폴링 사이사이 {@link #list} 를 다시 불러
+     * (다른 AI 기능과 같은 규칙). 12장이 40초 남짓 걸리므로 앱은 폴링 사이사이 {@link #list} 를 다시 불러
      * 칸을 하나씩 채운다.
      */
     @PostMapping("/generate")

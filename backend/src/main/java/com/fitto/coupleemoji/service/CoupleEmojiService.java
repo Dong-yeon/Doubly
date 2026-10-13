@@ -109,10 +109,14 @@ public class CoupleEmojiService {
      * 기본 표정조차 다 못 채웠다(docs/COUPLE_EMOJI_CREATE_UX_2026-09-29.md §2). 한 장 더(약 0.045 USD)로
      * 첫 세트가 "기본 표정 한 벌"로 딱 떨어진다. 동시 4장이라 대기 시간은 한 바퀴(약 5초) 늘어난다.
      *
+     * <p><b>2026-10-13: 6 → 12.</b> 상품이 "한 세트 = 12장 + 다시 그리기 3번"이 됐다(3,900원,
+     * docs/EMOJI_12_REGEN_2026-10-13.md). 23종이라 두 세트면 거의 다 갖춘다(12 + 11). 원가는 다시 그리기까지 세트당
+     * 최대 15장 ≈ 0.68 USD. 동시 4장이라 대기는 약 3바퀴(40~45초)다.
+     *
      * <p>상한은 <b>요청 경계</b>({@link #prepare})에서만 본다. 그 아래 생성 로직은 장 수에
-     * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다.
+     * 제한이 없다 — 정책이 바뀌면 여기 숫자만 바꾼다. 앱의 {@code MAX_EMOJI_PER_REQUEST} 와 같아야 한다.
      */
-    static final int MAX_EMOTIONS_PER_REQUEST = 6;
+    static final int MAX_EMOTIONS_PER_REQUEST = 12;
 
     private final CoupleEmojiRepository repository;
     private final CoupleEmojiSetRepository setRepository;
