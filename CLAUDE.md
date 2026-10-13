@@ -99,6 +99,7 @@ npm run verify:place-link                  # 채팅 지도 링크 판별(정탐+
 npm run verify:home-event                  # 홈 다가오는 일정 KST 경계 — utils/homeEvent.ts 수정 시
 npm run verify:export-zip                  # 내보내기 ZIP 을 외부 도구로 풀어 대조 — utils/zipWriter.ts·utils/exportPaths.ts 수정 시
 node --experimental-strip-types scripts/verify-quarto.mjs   # 넷이 같아 미리보기 판정(서버 QuartoRulesTest 와 같은 케이스) — games/quarto 수정 시. npm 등록은 다음 빌드
+node --experimental-strip-types scripts/verify-omok.mjs     # 오목 연습 판 규칙(서버 OmokRulesTest 와 같은 케이스)·AI·레슨 — games/omok 수정 시. npm 등록은 다음 빌드
 npm run build:web                          # 아이콘 폰트 서브셋 + 웹 export
 npm run build:android / build:ios          # EAS production 빌드 (건당 과금 — 네이티브가 바뀔 때만)
 npm run update:production                  # EAS Update — JS/에셋만 바뀐 변경을 빌드 없이 배포
