@@ -183,6 +183,8 @@ public class CoupleEmojiService {
     /**
      * 요청 스레드: 관계·대상 검증 + 한도 차감. 여기서 던지는 402/429 는 그대로 HTTP 응답이 된다.
      */
+    // 클래스 기본값(읽기 전용 트랜잭션) 밖에서 돈다 — 안에서 차감하면 flush 되지 않아 산 세트가 줄지 않았다(consumeOne 주석)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public GenerationTicket prepare(Long userId, GenerateCoupleEmojiRequest request) {
         // 폴더 검사가 먼저다 — 아래 실패 경로에서 이 URL 을 지우는데, 우리 폴더의 것만 지워야 한다.
         if (!isSourceUrl(request.sourceImageUrl())) {

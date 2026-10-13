@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -46,8 +47,15 @@ public class FeatureCreditService {
         return (int) repository.sumRemaining(userId, feature);
     }
 
-    /** 한 회 차감 — 남은 묶음이 없으면 {@code false}. 먼저 산 것부터 쓴다. */
-    @Transactional
+    /**
+     * 한 회 차감 — 남은 묶음이 없으면 {@code false}. 먼저 산 것부터 쓴다.
+     *
+     * <p><b>자기 트랜잭션에서 돈다(REQUIRES_NEW).</b> 부르는 쪽이 읽기 전용 트랜잭션이면(우리 이모지 서비스가 클래스
+     * 기본값으로 그렇다) 합류한 순간 Hibernate 가 flush 하지 않아 {@code true} 를 돌려주고도 {@code used} 가 그대로였다
+     * — 산 세트가 한 번도 차감되지 않았다. PostgreSQL 에서는 행 잠금(FOR UPDATE)이 읽기 전용 트랜잭션에서 거절된다
+     * (docs/EMOJI_12_REGEN_2026-10-13.md, FeatureCreditReadOnlyTest).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean consumeOne(Long userId, Feature feature) {
         for (FeatureCredit credit : repository.findAvailable(userId, feature)) {
             if (credit.consumeOne()) {
@@ -58,7 +66,7 @@ public class FeatureCreditService {
     }
 
     /** {@link #consumeOne} 을 되돌린다 — 결과를 하나도 주지 못한 실패 뒤에만. */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void refundOne(Long userId, Feature feature) {
         for (FeatureCredit credit : repository.findConsumed(userId, feature)) {
             if (credit.refundOne()) {
