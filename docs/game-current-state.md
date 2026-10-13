@@ -509,3 +509,9 @@
 - 운영 PostgreSQL 배포 후 확인. 배포 순서는 **서버 먼저**(앱 허브는 서버가 모르는 경로여도 다른 카드를 비우지 않게 처리해 두었다).
 - 서버 문구에 이름이 박힌 곳과 앱 상수가 어긋나지 않게 할 동기화 테스트는 아직 없다(이름이 확정되면 `PlanFeatureSyncTest` 식으로 붙일 만하다).
 - `npm run verify:quarto` 등록은 다음 네이티브 빌드 때(`docs/EAS_BUILD.md`).
+
+### 11-8. 배포 기록 (2026-10-13)
+
+- 서버: Railway 배포 `e811c0ff`(커밋 `fd2aa2ad`) SUCCESS — 운영 DB V139 적용, 기동 정상, `/api/v1/games/quarto/current` 401(경로 존재) 확인.
+- 앱: production OTA — fingerprint 가 1.0.7 빌드와 일치(Android `700b96c0`, iOS `d75619b0`). update group Android `2a8017c1`, iOS `f6db4442`.
+- 아직: 실기기 확인(11-7), 이름 확정.
