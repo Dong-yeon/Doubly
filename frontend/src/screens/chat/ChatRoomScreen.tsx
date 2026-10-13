@@ -1931,6 +1931,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     const isTouch = item.messageType === 'TOUCH';
     const isWorkout = item.messageType === 'WORKOUT_CARD';
     const isMeal = item.messageType === 'MEAL_CARD';
+    // 일상 카드(V141) — 일상을 올리면 서버가 남긴다. 탭하면 우리 › 기록으로
+    const isFeed = item.messageType === 'FEED_CARD';
     // 루틴 공유(트레이너-회원) — 운동 카드와 같은 레이아웃에 배지만 다르게
     const isRoutine = item.messageType === 'ROUTINE_CARD';
     const callCard = item.messageType === 'CALL_CARD' ? parseCallCard(item.content) : null;
@@ -2196,6 +2198,38 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               {isPr ? 'PR 달성 🔥' : isRoutine ? '루틴' : '운동 기록'}
             </Text>
             <Text style={[styles.workoutText, mine && styles.workoutTextMine]}>{item.content}</Text>
+          </View>
+        ) : isFeed ? (
+          /*
+           * 일상 카드 — 첫 사진 + 글(서버 FeedService.postFeedCard). 일상을 고치면 제자리에서 바뀌고 지우면
+           * 삭제 표시된다. 사진을 누르면 크게, 글을 누르면 우리 › 기록(일상 상세 화면은 없다 — 반응·댓글이
+           * 거기 있다). 레이아웃은 식단 카드를 그대로 쓰되, 버튼 안에 버튼을 두지 않으려고 바깥은 View 다.
+           */
+          <View style={[styles.mealCard, mine ? styles.mealCardMine : styles.mealCardTheirs]}>
+            <Text style={[styles.mealBadge, mine ? styles.cardBadgeMine : styles.cardBadgeTheirs]}>일상</Text>
+            {item.imageUrl ? (
+              <Pressable
+                onPress={() => openImage(item.imageUrl!)}
+                onLongPress={() => onLongPressMessage(item)}
+                delayLongPress={300}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="일상 사진 크게 보기"
+              >
+                <Image source={{ uri: cardImageUrl(item.imageUrl, 208) }} style={styles.mealImage} resizeMode="cover" />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => navigation.navigate('Album', { screen: 'FeedTimeline', initial: false })}
+              onLongPress={() => onLongPressMessage(item)}
+              delayLongPress={300}
+              accessibilityRole="button"
+              accessibilityLabel="우리 기록에서 보기"
+            >
+              {item.content ? (
+                <Text style={styles.workoutText} numberOfLines={6}>{item.content}</Text>
+              ) : null}
+              <Text style={[styles.mealBadge, mine ? styles.cardBadgeMine : styles.cardBadgeTheirs]}>기록에서 보기 ›</Text>
+            </Pressable>
           </View>
         ) : isMeal ? (
           /*
