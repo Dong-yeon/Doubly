@@ -504,7 +504,7 @@
 
 ### 11-7. 남은 일
 
-- **이름 확정**(가칭 떼기) — 앱·서버 상수 둘.
+- ~~이름 확정~~ 2026-10-13 **러뷰포**(사용자 결정, 한글). KIPRIS 전체 검색에선 "러뷰포" 결과 없음 — 다만 새 KIPRIS 화면에서 상표 탭 검색이 자동화로 넘어가지 않아 **상표 DB 단독 확인은 못 했다**(출원 전 사람이 확인할 것).
 - 연습 판(AI·튜토리얼)은 `docs/game-practice-tutorial_2026-10-13.md`.
 - ~~실기기 확인~~ 2026-10-13 사용자 확인.
 - 운영 PostgreSQL 배포 후 확인. 배포 순서는 **서버 먼저**(앱 허브는 서버가 모르는 경로여도 다른 카드를 비우지 않게 처리해 두었다).
@@ -516,3 +516,7 @@
 - 서버: Railway 배포 `e811c0ff`(커밋 `fd2aa2ad`) SUCCESS — 운영 DB V139 적용, 기동 정상, `/api/v1/games/quarto/current` 401(경로 존재) 확인.
 - 앱: production OTA — fingerprint 가 1.0.7 빌드와 일치(Android `700b96c0`, iOS `d75619b0`). update group Android `2a8017c1`, iOS `f6db4442`.
 - 아직: 실기기 확인(11-7), 이름 확정.
+
+### 11-9. 이름 (2026-10-13)
+
+표시명 "넷이 같아(가칭)" → **러뷰포**(사용자 결정). 앱 `F/constants/quarto.ts`·서버 `QuartoGame.DISPLAY_NAME` 두 곳. 내부 키 `QUARTO`·웹 경로 `game/four` 는 그대로.

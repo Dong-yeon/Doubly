@@ -33,10 +33,10 @@ import java.util.List;
 public class QuartoGame extends CoupleGame {
 
     /**
-     * 사용자에게 보이는 이름 — <b>임시값</b>이다(상표 때문에 원작 이름을 쓰지 않는다). 앱의
-     * {@code constants/quarto.ts} 의 {@code QUARTO_DISPLAY_NAME} 과 같이 바꾼다.
+     * 사용자에게 보이는 이름 — 러뷰포(2026-10-13 사용자 결정, 예전 임시 이름 "넷이 같아(가칭)"). 상표 때문에 원작 이름은
+     * 쓰지 않는다. 앱의 {@code constants/quarto.ts} 의 {@code QUARTO_DISPLAY_NAME} 과 같이 바꾼다.
      */
-    public static final String DISPLAY_NAME = "넷이 같아(가칭)";
+    public static final String DISPLAY_NAME = "러뷰포";
 
     /** 16자, 칸마다 '0'~'f' 또는 '.' */
     @Column(name = "quarto_board", length = 16)

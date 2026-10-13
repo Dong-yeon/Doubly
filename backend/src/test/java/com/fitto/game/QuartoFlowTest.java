@@ -8,6 +8,7 @@ import com.fitto.chat.repository.ChatMessageRepository;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.game.domain.GameStatus;
+import com.fitto.game.domain.QuartoGame;
 import com.fitto.game.dto.GameRecordResponse;
 import com.fitto.game.dto.QuartoGameResponse;
 import com.fitto.game.dto.QuartoMoveRequest;
@@ -230,7 +231,7 @@ class QuartoFlowTest {
         List<ChatMessage> cards = chatMessageRepository.findAll().stream()
                 .filter(m -> m.getMessageType() == MessageType.GAME_CARD)
                 .toList();
-        assertThat(cards.get(cards.size() - 1).getContent()).contains("넷이 같아").contains("승리");
+        assertThat(cards.get(cards.size() - 1).getContent()).contains(QuartoGame.DISPLAY_NAME).contains("승리");
 
         GameRecordResponse r = quartoService.record(users[1]);
         assertThat(r.me()).isEqualTo(1);
