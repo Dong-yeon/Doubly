@@ -34,6 +34,11 @@ export const coupleEmojiApi = {
     emotions?: CoupleEmojiEmotion[];
     /** 같은 시도를 두 번 접수하지 않게 하는 키 — 서버가 같은 키면 차감 없이 처음 작업을 돌려준다 */
     requestId?: string;
+    /**
+     * 플랜 한도·첫 무료로 열리지 않으면 유료 재화로 낸다 — 사용자가 "재화로 만들기"를 고른 것. 서버는 이 값이 없으면
+     * 잔액이 있어도 빼지 않는다
+     */
+    payWithCurrency?: boolean;
   }) =>
     unwrap(apiClient.post<ApiResponse<AiJobStart>>('/couple-emojis/generate', payload)),
 
@@ -83,10 +88,17 @@ export async function startCoupleEmojiGeneration(
   subjectUserId?: number,
   emotions?: CoupleEmojiEmotion[],
   requestId?: string,
+  payWithCurrency?: boolean,
 ): Promise<string> {
   const signature = await coupleEmojiApi.uploadSignature();
   const sourceImageUrl = await uploadImageWithSignature(croppedUri, signature);
-  const { jobId } = await coupleEmojiApi.generate({ sourceImageUrl, subjectUserId, emotions, requestId });
+  const { jobId } = await coupleEmojiApi.generate({
+    sourceImageUrl,
+    subjectUserId,
+    emotions,
+    requestId,
+    payWithCurrency: payWithCurrency || undefined,
+  });
   return jobId;
 }
 
