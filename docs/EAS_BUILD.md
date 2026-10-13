@@ -471,6 +471,7 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
 - `package.json` 에 `"verify:quarto": "node --experimental-strip-types scripts/verify-quarto.mjs"` 등록 —
   넷이 같아 미리보기 판정 검증(2026-10-13). 그때까지는 그 명령을 직접 돌린다.
 - 같은 식으로 `"verify:omok": "node --experimental-strip-types scripts/verify-omok.mjs"` — 오목 연습 판 규칙·AI·레슨(2026-10-13).
+- `"verify:wallrace": "node --experimental-strip-types scripts/verify-wallrace.mjs"` — 길막기 연습 판 규칙(서버 테스트와 같은 케이스)·AI·레슨(2026-10-13).
 
 ### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
 

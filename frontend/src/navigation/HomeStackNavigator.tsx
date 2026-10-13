@@ -27,6 +27,7 @@ import { OmokPracticeScreen } from '../screens/home/OmokPracticeScreen';
 import { CatchMindScreen } from '../screens/home/CatchMindScreen';
 import { PuyoScreen } from '../screens/home/PuyoScreen';
 import { WallRaceScreen } from '../screens/home/WallRaceScreen';
+import { WallRacePracticeScreen } from '../screens/home/WallRacePracticeScreen';
 import { QuartoScreen } from '../screens/home/QuartoScreen';
 import { QuartoPracticeScreen } from '../screens/home/QuartoPracticeScreen';
 import { QUARTO_DISPLAY_NAME } from '../constants/quarto';
@@ -91,6 +92,12 @@ export function HomeStackNavigator() {
       />
       <Stack.Screen name="Quarto" component={QuartoScreen} options={{ title: QUARTO_DISPLAY_NAME }} />
       <Stack.Screen name="QuartoPractice" component={QuartoPracticeScreen} options={{ title: `${QUARTO_DISPLAY_NAME} 연습` }} />
+      <Stack.Screen
+        name="WallRacePractice"
+        component={WallRacePracticeScreen}
+        // 실전과 같은 이유 — 벽 조각을 판으로 끄는 것이 조작이라 스와이프백이 켜져 있으면 끄는 순간 화면이 닫힌다
+        options={{ title: '길막기 연습', gestureEnabled: false, fullScreenGestureEnabled: false }}
+      />
       <Stack.Screen
         name="CatchMind"
         component={CatchMindScreen}
