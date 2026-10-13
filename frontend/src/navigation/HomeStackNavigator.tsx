@@ -26,6 +26,8 @@ import { OmokScreen } from '../screens/home/OmokScreen';
 import { CatchMindScreen } from '../screens/home/CatchMindScreen';
 import { PuyoScreen } from '../screens/home/PuyoScreen';
 import { WallRaceScreen } from '../screens/home/WallRaceScreen';
+import { QuartoScreen } from '../screens/home/QuartoScreen';
+import { QUARTO_DISPLAY_NAME } from '../constants/quarto';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 // 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
 import { TripListScreen } from '../screens/trip/TripListScreen';
@@ -84,6 +86,7 @@ export function HomeStackNavigator() {
           fullScreenGestureEnabled: false,
         }}
       />
+      <Stack.Screen name="Quarto" component={QuartoScreen} options={{ title: QUARTO_DISPLAY_NAME }} />
       <Stack.Screen
         name="CatchMind"
         component={CatchMindScreen}
