@@ -4,7 +4,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type PracticeGameKey = 'QUARTO' | 'OMOK';
+export type PracticeGameKey = 'QUARTO' | 'OMOK' | 'WALL_RACE';
 
 const KEY = (game: PracticeGameKey) => `doubly.practice.${game}.tutorialDone`;
 

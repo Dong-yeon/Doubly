@@ -11,7 +11,7 @@
  * 바로 놓지 않는다 — 교차점을 누르면 미리보기가 뜨고 한 번 더 눌러야 확정된다.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, PanResponder, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
@@ -24,6 +24,7 @@ import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
+import { WallRaceBoard, WR_COLORS, type WallKind } from '../../components/wallrace/WallRaceBoard';
 import { gamePieceApi, wallRaceApi } from '../../api/game';
 import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
 import { GamePieceSheet } from '../../components/GamePieceSheet';
@@ -38,222 +39,23 @@ import { haptics } from '../../utils/haptics';
 import { fontSize, radius, spacing } from '../../constants/theme';
 import type { GamePieces, GameRecord, WallRaceGame } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
-import { palettes } from '../../theme/palette';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'WallRace'>;
 
-const SIZE = 9;
-const WALL_SIZE = SIZE - 1;
-
 /*
- * 게임 화면 색 — 판을 두는 동안은 앱 테마와 상관없이 어두운 게임판이다(사용자가 보여 준 PathLock 화면, 2026-10-08).
- * 테마 토큰을 쓰지 않는 이유는 오목과 같다 — 라이트·다크 어느 쪽에서도 같은 판이어야 말과 벽이 읽힌다.
+ * 게임 화면 색 — 판·트레이와 같은 어두운 게임판 색(components/wallrace/WallRaceBoard 의 WR_COLORS).
+ * 판 그리기·벽 끌어 놓기는 그 컴포넌트로 옮겼다 — 연습 판(WallRacePracticeScreen)이 같은 그림·조작을 쓴다.
  */
-const D_BG = '#0E0F13';
-const D_CARD = '#1A1C24';
-const D_LINE = '#2A2E3A';
-const D_TEXT = '#E9EBF0';
-const D_SUB = '#8D93A3';
-const BOARD_BG = '#262A35'; // 칸 사이 홈 — 칸보다 밝아 격자선처럼 보인다
-const CELL_BG = '#161922';
-const BOARD_FRAME = '#3B3528';
-const GROOVE = '#3A4050';
-/** 주인을 모르는 벽(기보가 잘린 옛 판) — 내·상대 색 어느 쪽도 아닌 중립 */
-const WALL_COLOR = '#B9C0CE';
-/*
- * 말·목표줄은 소유자 색 — 판이 다크에서도 같은 밝은 판이라 <b>라이트 팔레트로 고정</b>한다.
- * 예전엔 나 파랑·상대 빨강 하드코딩이라 앱의 나(코랄)/상대(하늘)와 정반대였다(2026-10-05).
- * CELL_BG 위 대비: 나 4.90 · 상대 4.88.
- */
-const PAWN_ME = palettes.light.me;
-const PAWN_PARTNER = palettes.light.partner;
-/** 목표 줄 — 어두운 판 위에 주인 색을 옅게 */
-const GOAL_ME = withAlpha(PAWN_ME, 0.16);
-const GOAL_PARTNER = withAlpha(PAWN_PARTNER, 0.16);
-
-function withAlpha(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
-
-/**
- * 벽의 주인 — 기보를 처음부터 훑어 "누가 몇 번째 수에 놓았나"로 정한다. 선공은 판을 연 사람의 상대이므로
- * 짝수 번째 수가 상대 쪽이다(WallRaceGame.sideAt). 서버에 주인을 따로 저장하지 않아도 된다(V97 주석).
- * 기보가 잘린 옛 판은 일부 벽의 주인을 모른다 — 그 벽은 중립색으로 그린다.
- */
-function wallOwners(moves: string[], iAmCreator: boolean): Map<number, 'me' | 'partner'> {
-  const owners = new Map<number, 'me' | 'partner'>();
-  moves.forEach((move, i) => {
-    if (!move.startsWith('W') || move.length < 3) return;
-    const slot = Number(move.slice(1, -1));
-    if (!inRange(slot, WALL_SIZE * WALL_SIZE)) return;
-    const moverIsCreator = i % 2 === 1;
-    owners.set(slot, moverIsCreator === iAmCreator ? 'me' : 'partner');
-  });
-  return owners;
-}
-
+const D_BG = WR_COLORS.bg;
+const D_CARD = WR_COLORS.card;
+const D_LINE = WR_COLORS.line;
+const D_TEXT = WR_COLORS.text;
+const D_SUB = WR_COLORS.sub;
+const PAWN_ME = WR_COLORS.me;
+const PAWN_PARTNER = WR_COLORS.partner;
 
 /** 수 요청 순번 — 옛 응답이 새 상태를 덮지 않도록(OmokScreen.placeSeq 와 같은 이유) */
 let moveSeq = 0;
-
-type WallKind = 'H' | 'V';
-type Pending = { slot: number; kind: WallKind };
-
-/**
- * 끄는 벽 미리보기를 손가락보다 이만큼 위에 띄운다 — 손가락이 벽을 가리면 어디에 붙는지 보이지 않는다
- * (Quoridor.II 리뷰의 "원하는 자리에 놓기가 거의 불가능"이 이것이다. docs/pathlock-ux-analysis_2026-10-08.md §3-4)
- */
-const DRAG_LIFT = 48;
-/** 이 거리보다 덜 움직였으면 끈 게 아니라 누른 것이다 — 탭 모드로 들어간다 */
-const TAP_SLOP = 8;
-
-/** 놓을 수 없는 이유 — 서버 ErrorCode 의 문장과 같은 뜻으로 맞춘다 */
-const ILLEGAL_REASON: Record<string, string> = {
-  OVERLAP: '이미 벽이 있는 자리예요',
-  BLOCKS_PATH: '길을 완전히 막을 수는 없어요',
-};
-
-const PAD = 4;
-/** 홈(벽이 놓이는 칸 사이 틈)의 폭 — 칸 한 변에 대한 비율 */
-const GROOVE_RATIO = 0.2;
-
-/**
- * 판 한 변에서 칸·홈 치수를 뽑는다. 대국판과 지난 판의 작은 판이 <b>같은 식</b>을 쓰도록
- * 컴포넌트 밖에 둔다 — 벽 위치를 두 벌로 계산하면 작은 판에서만 어긋난다.
- */
-function geometry(boardSize: number) {
-  const cell = (boardSize - PAD * 2) / (SIZE + WALL_SIZE * GROOVE_RATIO);
-  const gap = cell * GROOVE_RATIO;
-  const pitch = cell + gap;
-  return {
-    cell,
-    gap,
-    pitch,
-    cellX: (col: number) => PAD + col * pitch,
-    cellY: (row: number) => PAD + row * pitch,
-    /** 교차점 (r,c) 의 홈 중심 */
-    jointX: (c: number) => PAD + (c + 1) * pitch - gap / 2,
-    jointY: (r: number) => PAD + (r + 1) * pitch - gap / 2,
-  };
-}
-
-/**
- * 기보의 마지막 수 — 'P12' 면 그 칸, 'W35H' 면 그 벽 자리.
- *
- * <p>비동기 게임이라 며칠 만에 들어오는데, <b>돌은 개수가 늘어 보이지만 벽은 어디 생겼는지
- * 보이지 않는다.</b> 64자리 중에서 눈으로 찾게 두지 않으려고 마지막 수를 표시한다.
- * 차례가 번갈아 오므로 "내가 마지막으로 본 뒤 바뀐 것"이 정확히 이 한 수다.
- */
-function lastMoveOf(moves: string[]): { cell: number | null; slot: number | null } {
-  const last = moves.length > 0 ? moves[moves.length - 1] : undefined;
-  if (!last) return { cell: null, slot: null };
-  // 범위를 벗어난 값이 오면 조용히 표시를 접는다 — 표시 하나 때문에 판이 깨지면 안 된다
-  if (last.startsWith('P') && last.length > 1) {
-    const cell = Number(last.slice(1));
-    return { cell: inRange(cell, SIZE * SIZE) ? cell : null, slot: null };
-  }
-  if (last.startsWith('W') && last.length > 2) {
-    const slot = Number(last.slice(1, -1));
-    return { cell: null, slot: inRange(slot, WALL_SIZE * WALL_SIZE) ? slot : null };
-  }
-  return { cell: null, slot: null };
-}
-
-/**
- * 대국판 View — 끌기를 시작할 때 화면 위치를 잰다. 트레이 처리기를 한 번만 만들려고 모듈 변수에 둔다
- * (PuyoScreen 의 live·session 과 같은 이유 — 처리기는 만든 순간의 클로저를 든다). 대국판은 화면에 하나뿐이다.
- */
-let boardNode: View | null = null;
-/** 대국판이 180° 돌려 그려졌는가 — 손가락이 가리킨 교차점(화면 좌표)을 저장 좌표로 되돌릴 때 쓴다 */
-let boardFlipped = false;
-function setBoardNode(view: View | null) {
-  boardNode = view;
-}
-
-type TrayActions = {
-  setDrag: (d: { kind: WallKind; slot: number | null } | null) => void;
-  setTapKind: (k: WallKind) => void;
-  setWallMode: (on: boolean) => void;
-  setPending: (u: (prev: Pending | null) => Pending | null) => void;
-};
-
-/**
- * 트레이 조각 하나의 제스처 — 끌면 판 위 교차점에 스냅된 미리보기, 손을 떼면 "놓을까요?"로 남긴다.
- * 끌지 않고 누르면 탭 모드(교차점을 눌러 고르기). 판 밖에서 놓으면 취소.
- * docs/pathlock-ux-analysis_2026-10-08.md §3-1.
- */
-function createTrayResponder(kind: WallKind, a: TrayActions) {
-  // 한 번의 터치 동안만 사는 값 — 처리기와 같이 만들어져 ref 가 필요 없다(PuyoScreen 의 pan 과 같다)
-  const cur = { frame: null as { x: number; y: number; size: number } | null, slot: null as number | null, dragging: false };
-  const end = () => {
-    cur.dragging = false;
-    a.setDrag(null);
-  };
-  return PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    // 끄는 도중 목록·화면이 손가락을 가져가지 못하게 한다
-    onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: () => {
-      cur.frame = null;
-      cur.slot = null;
-      cur.dragging = false;
-      boardNode?.measure((_x, _y, w, _h, pageX, pageY) => {
-        cur.frame = { x: pageX, y: pageY, size: w };
-      });
-    },
-    onPanResponderMove: (e, g) => {
-      if (!cur.dragging && Math.abs(g.dx) < TAP_SLOP && Math.abs(g.dy) < TAP_SLOP) return;
-      const shown = snapToSlot(cur.frame, e.nativeEvent.pageX, e.nativeEvent.pageY);
-      const slot = shown === null ? null : boardFlipped ? WALL_SIZE * WALL_SIZE - 1 - shown : shown;
-      if (cur.dragging && slot === cur.slot) return;
-      if (slot !== null) haptics.light();
-      cur.dragging = true;
-      cur.slot = slot;
-      a.setDrag({ kind, slot });
-    },
-    onPanResponderRelease: () => {
-      const { dragging, slot } = cur;
-      end();
-      if (!dragging) {
-        // 끌지 않고 눌렀다 — 탭 모드. 정밀 조작이 어려운 경우·스크린리더용
-        a.setTapKind(kind);
-        a.setWallMode(true);
-        a.setPending((prev) => (prev ? { slot: prev.slot, kind } : null));
-        return;
-      }
-      if (slot === null) return; // 판 밖에서 놓았다 — 취소
-      a.setTapKind(kind);
-      a.setWallMode(true);
-      a.setPending(() => ({ slot, kind }));
-    },
-    onPanResponderTerminate: end,
-  });
-}
-
-/**
- * 손가락 위치를 가장 가까운 교차점으로 — 판 밖이면 null. 손가락보다 DRAG_LIFT 위를 겨눈다.
- * 스냅 반경은 교차점 간격의 절반이라 판 안이면 어디서든 한 점에 붙는다(빈틈 없음).
- */
-function snapToSlot(frame: { x: number; y: number; size: number } | null, pageX: number, pageY: number): number | null {
-  if (!frame) return null;
-  const x = pageX - frame.x;
-  const y = pageY - DRAG_LIFT - frame.y;
-  const margin = frame.size * 0.08;
-  if (x < -margin || y < -margin || x > frame.size + margin || y > frame.size + margin) return null;
-  const { pitch, gap } = geometry(frame.size);
-  // jointX(c) = PAD + (c + 1)·pitch − gap/2 를 거꾸로 푼다
-  const c = Math.round((x - PAD + gap / 2) / pitch - 1);
-  const r = Math.round((y - PAD + gap / 2) / pitch - 1);
-  const clamp = (v: number) => Math.max(0, Math.min(WALL_SIZE - 1, v));
-  return clamp(r) * WALL_SIZE + clamp(c);
-}
-
-function inRange(value: number, limit: number): boolean {
-  return Number.isInteger(value) && value >= 0 && value < limit;
-}
 
 export function WallRaceScreen({ navigation }: Props) {
   const width = useContentWidth();
@@ -300,16 +102,8 @@ export function WallRaceScreen({ navigation }: Props) {
   const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [undoBusy, setUndoBusy] = useState(false);
-  /** 벽 모드에서 고른 자리 — 확정 전이라 아직 서버에 가지 않았다 */
-  const [pending, setPending] = useState<Pending | null>(null);
-  const [wallMode, setWallMode] = useState(false);
-  /** 탭 모드에서 새로 고르는 자리에 쓸 방향 — 트레이에서 누른 조각 */
-  const [tapKind, setTapKind] = useState<WallKind>('H');
-  /**
-   * 트레이에서 끌고 있는 벽 — slot 은 지금 붙을 교차점(판 밖이면 null).
-   * 끄는 동안 목록 스크롤을 잠근다(캐치마인드 캔버스와 같은 이유 — 위아래로 끌면 화면이 같이 내려간다).
-   */
-  const [drag, setDrag] = useState<{ kind: WallKind; slot: number | null } | null>(null);
+  /** 판에서 벽을 끄는 중 — 끄는 동안 목록 스크롤을 잠근다(위아래로 끌면 화면이 같이 내려간다) */
+  const [dragging, setDragging] = useState(false);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -320,11 +114,6 @@ export function WallRaceScreen({ navigation }: Props) {
       refreshPieces();
       setGame(g);
       setHistory(h);
-      // 내 차례가 아니게 됐으면 고르던 벽은 의미가 없다 — 모드째 내린다
-      if (!g?.myTurn) {
-        setPending(null);
-        setWallMode(false);
-      }
       // 보고 있던 판이 사라졌다 — 기록에 있으면 끝난 것(결과), 없으면 상대가 접은 것(안내).
       // 보고 있던 판이 없었으면(처음 들어옴) 아무것도 올리지 않는다 — 지난 판은 아래 목록에 있다
       const watching = watchingRef.current;
@@ -358,12 +147,6 @@ export function WallRaceScreen({ navigation }: Props) {
   useEffect(() => {
     navigation.setOptions({ headerShown: !inGame });
   }, [navigation, inGame]);
-  // 트레이 제스처가 화면 좌표를 저장 좌표로 되돌릴 때 쓴다 — 판을 연 쪽이면 판을 180° 돌려 그린다(renderBoard)
-  const flipped = game !== null && game.myGoalRow === SIZE - 1;
-  useEffect(() => {
-    boardFlipped = flipped;
-  }, [flipped]);
-
   // 진행 중 판을 볼 때마다 기억해 둔다 — 사라졌을 때 끝났는지 접혔는지 가르는 기준
   useEffect(() => {
     if (game) watchingRef.current = game;
@@ -396,8 +179,6 @@ export function WallRaceScreen({ navigation }: Props) {
       setGame(g);
       setJustFinished(null);
       setFoldedBy(null);
-      setPending(null);
-      setWallMode(false);
       haptics.light();
       if (!g.myTurn) toast.success(`${g.partnerName ?? '상대'}에게 선공을 줬어요. 두면 알려드릴게요.`);
     } catch (e) {
@@ -409,11 +190,9 @@ export function WallRaceScreen({ navigation }: Props) {
 
   /** 수를 둔 뒤 공통 — 끝났으면 결과 화면으로 넘긴다 */
   const applyResult = (updated: WallRaceGame) => {
-    setPending(null);
     if (updated.status === 'COMPLETED') {
       setJustFinished(updated);
       setGame(null);
-      setWallMode(false);
       if (updated.winner === 'ME') haptics.success();
       wallRaceApi.history().then(setHistory).catch(() => undefined);
       refreshRecord();
@@ -424,7 +203,6 @@ export function WallRaceScreen({ navigation }: Props) {
 
   const movePawn = async (target: number) => {
     if (!game || busy || !game.myTurn) return;
-    haptics.light();
     setBusy(true);
     const seq = ++moveSeq;
     try {
@@ -440,20 +218,13 @@ export function WallRaceScreen({ navigation }: Props) {
     }
   };
 
-  const confirmWall = async () => {
-    if (!game || !pending || busy) return;
-    const reason = illegalReason(game, pending.slot, pending.kind);
-    if (reason) {
-      toast.error(reason);
-      return;
-    }
-    haptics.light();
+  const placeWall = async (slot: number, kind: WallKind) => {
+    if (!game || busy) return;
     setBusy(true);
     const seq = ++moveSeq;
     try {
-      const updated = await wallRaceApi.placeWall(game.id, pending.slot, pending.kind);
+      const updated = await wallRaceApi.placeWall(game.id, slot, kind);
       if (seq !== moveSeq) return;
-      setWallMode(false);
       applyResult(updated);
     } catch (e) {
       if (seq !== moveSeq) return;
@@ -465,36 +236,11 @@ export function WallRaceScreen({ navigation }: Props) {
     }
   };
 
-  /*
-   * ── 드래그로 벽 놓기 (docs/pathlock-ux-analysis_2026-10-08.md §3) ─────────────────
-   * 트레이의 가로·세로 조각을 끌어 판에 놓는다. 손을 떼면 바로 서버에 보내지 않고 "놓을까요?"(판 위 [놓기]/✕)로
-   * 남긴다 — 벽은 되돌리기 어려운 자원이고 무르기는 상대 동의가 필요해서다(§3-2).
-   * 제스처 처리기는 한 번 만들고 최신 값은 ref 로 읽는다(PanResponder 는 만든 순간의 클로저를 든다).
-   */
-  const startTapMode = (kind: WallKind) => {
-    setTapKind(kind);
-    setWallMode(true);
-    // 이미 고른 자리가 있으면 방향만 바꾼다 — 트레이 조각이 곧 방향 토글이다
-    setPending((prev) => (prev ? { slot: prev.slot, kind } : null));
-  };
-
-  // 처리기는 한 번만 만든다 — 상태 setter 만 쓰므로 다시 만들 이유가 없다
-  const trayH = useMemo(() => createTrayResponder('H', { setDrag, setTapKind, setWallMode, setPending }), []);
-  const trayV = useMemo(() => createTrayResponder('V', { setDrag, setTapKind, setWallMode, setPending }), []);
-
-  /** 지금 판에서 그 자리에 벽을 놓을 수 없는 이유 — 서버가 내려준 목록에서 찾는다(규칙은 서버에 한 벌) */
-  const illegalReason = (g: WallRaceGame, slot: number, kind: WallKind): string | null => {
-    const hit = g.illegalWalls?.find((w) => w.slot === slot && w.kind === kind);
-    return hit ? (ILLEGAL_REASON[hit.reason] ?? '여기는 놓을 수 없어요') : null;
-  };
-
   const askUndo = async () => {
     if (!game || undoBusy) return;
     setUndoBusy(true);
     try {
       setGame(await wallRaceApi.requestUndo(game.id));
-      setPending(null);
-      setWallMode(false);
       toast.success('무르기를 부탁했어요. 상대가 받아주면 다시 둘 수 있어요.');
     } catch (e) {
       toast.error(getErrorMessage(e, '무르기를 부탁하지 못했어요.'));
@@ -509,8 +255,6 @@ export function WallRaceScreen({ navigation }: Props) {
     setUndoBusy(true);
     try {
       setGame(await wallRaceApi.respondUndo(game.id, accept));
-      setPending(null);
-      setWallMode(false);
       if (accept) haptics.light();
       toast.success(accept ? '한 수 물러줬어요.' : '그냥 두기로 했어요.');
     } catch (e) {
@@ -540,7 +284,6 @@ export function WallRaceScreen({ navigation }: Props) {
             .giveUp(game.id)
             .then(() => {
               setGame(null);
-              setPending(null);
               toast.success('이 판은 접었어요.');
             })
             .catch((e) => {
@@ -571,303 +314,11 @@ export function WallRaceScreen({ navigation }: Props) {
     [serverRecord, history],
   );
 
-  const renderBoard = (g: WallRaceGame, interactive: boolean, size = boardSize) => {
-    const { cell, gap, pitch, cellX, cellY, jointX, jointY } = geometry(size);
-    // 끄는 중이면 끄는 벽이, 아니면 확정을 기다리는 벽이 미리보기다
-    const preview: Pending | null = !interactive
-      ? null
-      : drag
-        ? drag.slot === null
-          ? null
-          : { slot: drag.slot, kind: drag.kind }
-        : pending;
-    const previewIllegal = preview ? illegalReason(g, preview.slot, preview.kind) : null;
-    const legal = new Set(interactive && !wallMode ? g.legalMoves : []);
-    const pawnSize = cell * 0.62;
-    const dotSize = cell * 0.46;
-    const iAmCreator = g.myGoalRow === SIZE - 1;
-    /*
-     * 나는 언제나 아래에서 출발한다(사용자 요청, 2026-10-08). 판을 연 쪽은 저장상 맨 윗줄에서 출발하므로 판을
-     * 180° 돌려 그린다. 180° 회전은 가로 벽을 가로로, 세로 벽을 세로로 남기므로 칸 번호(80−i)와 벽 자리(63−s)만
-     * 뒤집으면 된다. 상태·서버 요청은 전부 저장 좌표 그대로이고, 그리는 자리와 손가락 좌표만 바꾼다.
-     * (예전 §10-4 의 "판을 돌리지 않는다"는 좌표로 말을 주고받으려던 것인데, 좌표 표시는 넣지 않았다.)
-     */
-    const flip = iAmCreator;
-    const vc = (i: number) => (flip ? SIZE * SIZE - 1 - i : i);
-    const vs = (sl: number) => (flip ? WALL_SIZE * WALL_SIZE - 1 - sl : sl);
-    const shownMyGoalRow = flip ? SIZE - 1 - g.myGoalRow : g.myGoalRow;
-    const owners = wallOwners(g.moves, iAmCreator);
-    const meFace = pieces?.myImageUrl ?? null;
-    const partnerFace = pieces?.partnerImageUrl ?? null;
-    const last = lastMoveOf(g.moves);
-    // 말보다 충분히 커야 테가 남는다. 칸을 넘지 않는 선(0.62 × 1.45 ≈ 0.9칸)에서 잡았다
-    const ringSize = pawnSize * 1.45;
-    /*
-     * 교차점 탭 영역은 서로 닿을 만큼 크게 잡는다 — 벽은 칸이 아니라 칸 사이에 놓여서
-     * 홈(gap)만큼만 주면 손가락으로 집을 수가 없다(분석 §4-2 4번이 지목한 자리).
-     * 한 변을 pitch 로 두면 빈틈도 겹침도 없이 8×8 을 덮는다.
-     */
-    const jointHit = pitch;
-
-    return (
-      <View ref={interactive ? setBoardNode : undefined} style={[styles.board, { width: size, height: size }]}>
-        {/* 칸 — 목표 줄은 옅게 칠해 "어디로 가야 하는지"가 판에서 바로 읽히게 한다 */}
-        {Array.from({ length: SIZE * SIZE }, (_, index) => {
-          const row = Math.floor(index / SIZE);
-          const col = index % SIZE;
-          const isMyGoal = row === shownMyGoalRow;
-          const isPartnerGoal = row === (shownMyGoalRow === 0 ? SIZE - 1 : 0);
-          return (
-            <View
-              key={`c${index}`}
-              style={[
-                styles.cell,
-                { left: cellX(col), top: cellY(row), width: cell, height: cell },
-                isMyGoal && { backgroundColor: GOAL_ME },
-                isPartnerGoal && { backgroundColor: GOAL_PARTNER },
-              ]}
-            />
-          );
-        })}
-
-        {/* 갈 수 있는 자리 — 서버가 계산해 내려준 것만 찍는다 */}
-        {[...legal].map((index) => {
-          const row = Math.floor(vc(index) / SIZE);
-          const col = vc(index) % SIZE;
-          return (
-            <Pressable
-              key={`m${index}`}
-              onPress={() => movePawn(index)}
-              accessibilityRole="button"
-              accessibilityLabel={`${row + 1}행 ${col + 1}열로 이동`}
-              style={[styles.moveHit, { left: cellX(col), top: cellY(row), width: cell, height: cell }]}
-            >
-              {/* 갈 수 있는 칸 — 내 색 테두리의 고리(PathLock 의 금색 고리 자리) */}
-              <View
-                style={[
-                  styles.moveDot,
-                  {
-                    width: dotSize,
-                    height: dotSize,
-                    borderRadius: dotSize / 2,
-                    left: (cell - dotSize) / 2,
-                    top: (cell - dotSize) / 2,
-                  },
-                ]}
-              />
-            </Pressable>
-          );
-        })}
-
-        {/* 마지막 수가 말이었으면 그 자리에 테두리 — 말보다 먼저 그려 밖으로 테가 남는다 */}
-        {last.cell !== null ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.lastRing,
-              {
-                width: ringSize,
-                height: ringSize,
-                borderRadius: ringSize / 2,
-                left: cellX(vc(last.cell) % SIZE) + (cell - ringSize) / 2,
-                top: cellY(Math.floor(vc(last.cell) / SIZE)) + (cell - ringSize) / 2,
-              },
-            ]}
-          />
-        ) : null}
-
-        {/*
-          말 — 우리 이모지가 있으면 그 사람의 얼굴, 없으면 말 모양. 발밑 받침은 주인 색이라 얼굴이어도 누구 말인지 읽힌다.
-          얼굴은 각자 고른 하나로 고정이다(GamePieceSheet) — 상황마다 바꾸면 어지러웠다.
-        */}
-        {([[g.myPawn, PAWN_ME, '내 말', meFace], [g.partnerPawn, PAWN_PARTNER, '상대 말', partnerFace]] as const).map(
-          ([pos, color, label, face]) => (
-            <View
-              key={label}
-              accessible
-              accessibilityLabel={`${label} ${Math.floor(vc(pos) / SIZE) + 1}행 ${(vc(pos) % SIZE) + 1}열`}
-              pointerEvents="none"
-              style={[styles.pawnBox, { left: cellX(vc(pos) % SIZE), top: cellY(Math.floor(vc(pos) / SIZE)), width: cell, height: cell }]}
-            >
-              <View
-                style={[
-                  styles.pawnBase,
-                  { backgroundColor: color, width: cell * 0.7, height: cell * 0.2, borderRadius: cell * 0.1, bottom: cell * 0.04 },
-                ]}
-              />
-              {face ? (
-                <Image source={{ uri: face }} style={{ width: cell * 0.92, height: cell * 0.92 }} contentFit="contain" />
-              ) : (
-                <View style={styles.pawnFallback}>
-                  <View style={{ width: pawnSize * 0.5, height: pawnSize * 0.5, borderRadius: pawnSize * 0.25, backgroundColor: color }} />
-                  <View
-                    style={{
-                      width: pawnSize * 0.86,
-                      height: pawnSize * 0.5,
-                      marginTop: pawnSize * 0.04,
-                      borderTopLeftRadius: pawnSize * 0.43,
-                      borderTopRightRadius: pawnSize * 0.43,
-                      borderBottomLeftRadius: pawnSize * 0.1,
-                      borderBottomRightRadius: pawnSize * 0.1,
-                      backgroundColor: color,
-                    }}
-                  />
-                </View>
-              )}
-            </View>
-          ),
-        )}
-
-        {/* 마지막 수가 벽이었으면 그 벽 뒤에 후광 — 벽 위에 테두리를 두면 홈이 얇아 안 읽힌다 */}
-        {last.slot !== null && (g.walls[last.slot] === 'H' || g.walls[last.slot] === 'V') ? (
-          <View
-            pointerEvents="none"
-            style={[styles.lastWall, wallRect(vs(last.slot), g.walls[last.slot] as 'H' | 'V', 3)]}
-          />
-        ) : null}
-
-        {/* 놓인 벽 */}
-        {Array.from({ length: WALL_SIZE * WALL_SIZE }, (_, slot) => {
-          const kind = g.walls[slot];
-          if (kind !== 'H' && kind !== 'V') return null;
-          // 벽은 놓은 사람 색 — 누가 어디를 막았는지 한눈에(기보로 주인을 찾는다)
-          const owner = owners.get(slot);
-          const color = owner === 'me' ? PAWN_ME : owner === 'partner' ? PAWN_PARTNER : WALL_COLOR;
-          return <View key={`w${slot}`} style={[styles.wall, { backgroundColor: color }, wallRect(vs(slot), kind)]} />;
-        })}
-
-        {/* 미리보기 — 아직 서버에 가지 않은 벽. 놓을 수 없는 자리면 빨갛게(서버가 내려준 목록) */}
-        {preview ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.wall,
-              previewIllegal ? styles.wallIllegal : [styles.wallPreview, { backgroundColor: PAWN_ME }],
-              wallRect(vs(preview.slot), preview.kind),
-            ]}
-          />
-        ) : null}
-
-        {/* 벽 모드일 때만 교차점 탭 영역을 깐다 — 평소엔 말 이동을 가리지 않게 없앤다 */}
-        {interactive && wallMode && !drag
-          ? Array.from({ length: WALL_SIZE * WALL_SIZE }, (_, shown) => {
-              const r = Math.floor(shown / WALL_SIZE);
-              const c = shown % WALL_SIZE;
-              const slot = vs(shown); // 저장 좌표 — 상태와 서버는 이것만 안다
-              const chosen = pending?.slot === slot;
-              return (
-                <Pressable
-                  key={`j${slot}`}
-                  onPress={() =>
-                    setPending((prev) =>
-                      // 같은 자리를 다시 누르면 방향이 바뀐다 — 손가락 하나로 둘 다 고를 수 있게
-                      prev && prev.slot === slot
-                        ? { slot, kind: prev.kind === 'H' ? 'V' : 'H' }
-                        : { slot, kind: tapKind },
-                    )
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={`${r + 1}·${c + 1} 교차점에 벽 놓기`}
-                  style={[
-                    styles.joint,
-                    {
-                      left: jointX(c) - jointHit / 2,
-                      top: jointY(r) - jointHit / 2,
-                      width: jointHit,
-                      height: jointHit,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.jointDot,
-                      chosen && styles.jointDotOn,
-                      { left: jointHit / 2 - 3, top: jointHit / 2 - 3 },
-                    ]}
-                  />
-                </Pressable>
-              );
-            })
-          : null}
-
-        {/* 판 위 확인 — 놓을 자리 바로 옆에 [놓기]/✕. 끄는 중에는 숨긴다 */}
-        {interactive && pending && !drag ? renderConfirm(pending) : null}
-      </View>
-    );
-
-    /** 미리보기 벽 옆의 [놓기]/✕ — 가로 벽은 위(맨 윗줄이면 아래), 세로 벽은 오른쪽(오른쪽 끝이면 왼쪽)에 붙인다 */
-    function renderConfirm(p: Pending) {
-      const r = Math.floor(vs(p.slot) / WALL_SIZE);
-      const c = vs(p.slot) % WALL_SIZE;
-      const btn = Math.max(32, Math.min(40, cell * 1.1));
-      const okW = btn * 1.7;
-      const w = okW + btn + 6;
-      const cx = jointX(c);
-      const cy = jointY(r);
-      let left: number;
-      let top: number;
-      if (p.kind === 'H') {
-        left = cx - w / 2;
-        top = r === 0 ? cy + gap + 4 : cy - gap / 2 - btn - 6;
-      } else {
-        left = c >= WALL_SIZE - 2 ? cx - gap / 2 - w - 6 : cx + gap / 2 + 6;
-        top = cy - btn / 2;
-      }
-      left = Math.max(2, Math.min(size - w - 2, left));
-      top = Math.max(2, Math.min(size - btn - 2, top));
-      return (
-        <View style={[styles.confirmRow, { left, top }]}>
-          <Pressable
-            onPress={confirmWall}
-            disabled={busy || !!previewIllegal}
-            accessibilityRole="button"
-            accessibilityLabel={p.kind === 'H' ? '가로 벽 놓기' : '세로 벽 놓기'}
-            style={({ pressed }) => [
-              styles.confirmBtn,
-              { width: okW, height: btn, borderRadius: btn / 2 },
-              previewIllegal ? styles.confirmBtnOff : styles.confirmBtnOk,
-              pressed && styles.confirmPressed,
-            ]}
-          >
-            <Text style={styles.confirmText}>놓기</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setPending(null)}
-            accessibilityRole="button"
-            accessibilityLabel="이 자리 취소"
-            style={({ pressed }) => [
-              styles.confirmBtn,
-              styles.confirmBtnCancel,
-              { width: btn, height: btn, borderRadius: btn / 2 },
-              pressed && styles.confirmPressed,
-            ]}
-          >
-            <MaterialCommunityIcons name="close" size={btn * 0.55} color={D_TEXT} />
-          </Pressable>
-        </View>
-      );
-    }
-
-    /** 벽 하나의 사각형 — 두 칸 길이로 홈을 덮는다. {@code grow} 는 사방으로 넓히는 여백(후광) */
-    function wallRect(slot: number, kind: 'H' | 'V', grow = 0) {
-      const r = Math.floor(slot / WALL_SIZE);
-      const c = slot % WALL_SIZE;
-      const long = cell * 2 + gap;
-      return kind === 'H'
-        ? {
-            left: cellX(c) - grow,
-            top: jointY(r) - gap / 2 - grow,
-            width: long + grow * 2,
-            height: gap + grow * 2,
-          }
-        : {
-            left: jointX(c) - gap / 2 - grow,
-            top: cellY(r) - grow,
-            width: gap + grow * 2,
-            height: long + grow * 2,
-          };
-    }
-  };
+  const faces = { me: pieces?.myImageUrl ?? null, partner: pieces?.partnerImageUrl ?? null };
+  /** 조작 없는 판(결과·지난 판) */
+  const renderBoard = (g: WallRaceGame, size = boardSize) => (
+    <WallRaceBoard view={g} size={size} interactive={false} showTray={false} faces={faces} />
+  );
 
   /** 핸디캡 줄 — 접어준 것은 숨기지 않는다(연쇄 퍼즐과 같은 규칙) */
   const renderHandicap = (g: WallRaceGame) => {
@@ -882,71 +333,6 @@ export function WallRaceScreen({ navigation }: Props) {
     );
   };
 
-  /**
-   * 내 차례의 조작 줄 — 벽 트레이(가로·세로 조각)를 늘 보여 준다. 조각을 <b>끌어</b> 판에 놓거나, <b>눌러</b>
-   * 탭 모드(교차점 고르기)로 들어간다. 예전의 "벽 놓기 → 점 누르기 → 같은 점 다시 눌러 방향 → 확정" 4단계를
-   * 끌기·놓기 두 단계로 줄였다(docs/pathlock-ux-analysis_2026-10-08.md).
-   */
-  const renderActionBar = (g: WallRaceGame) => {
-    if (!g.myTurn) return <Text style={styles.dHint}>상대가 두면 바로 보여요.</Text>;
-    const hasWalls = g.myWallsLeft > 0;
-    const dragIllegal = drag && drag.slot !== null ? illegalReason(g, drag.slot, drag.kind) : null;
-    const pendingIllegal = pending ? illegalReason(g, pending.slot, pending.kind) : null;
-    let hint: string;
-    if (drag) {
-      hint = drag.slot === null
-        ? '판 위로 끌어 오세요. 판 밖에서 놓으면 취소돼요.'
-        : (dragIllegal ?? '손을 떼면 그 자리에 미리 놓여요.');
-    } else if (pending) {
-      hint = pendingIllegal ?? "'놓기'를 누르면 놓여요. 다른 자리면 다시 끌어 오세요.";
-    } else if (wallMode) {
-      hint = '칸과 칸이 만나는 점을 눌러도 돼요. 같은 점을 다시 누르면 방향이 바뀌어요.';
-    } else {
-      hint = hasWalls
-        ? '고리를 누르면 말이 움직여요. 벽은 아래 조각을 판으로 끌어 놓아요.'
-        : '벽을 다 썼어요. 말을 움직여요.';
-    }
-    const activeKind = drag?.kind ?? (wallMode ? (pending?.kind ?? tapKind) : null);
-    return (
-      <View style={styles.wallPanel}>
-        {hasWalls ? (
-          <View style={styles.tray}>
-            {(['H', 'V'] as const).map((kind) => (
-              <View
-                key={kind}
-                {...(kind === 'H' ? trayH : trayV).panHandlers}
-                accessible
-                accessibilityRole="button"
-                accessibilityLabel={kind === 'H' ? '가로 벽, 끌어서 놓거나 눌러서 자리 고르기' : '세로 벽, 끌어서 놓거나 눌러서 자리 고르기'}
-                onAccessibilityTap={() => startTapMode(kind)}
-                pointerEvents={busy ? 'none' : 'auto'}
-                style={[styles.trayPiece, activeKind === kind && styles.trayPieceOn, busy && styles.trayPieceOff]}
-              >
-                <View style={[kind === 'H' ? styles.trayWallH : styles.trayWallV, { backgroundColor: PAWN_ME }]} />
-              </View>
-            ))}
-            <View style={styles.trayCount}>
-              <Text style={styles.trayCountNum}>{g.myWallsLeft}</Text>
-              <Text style={styles.trayCountLabel}>개의 벽</Text>
-            </View>
-            {wallMode ? (
-              <Pressable
-                onPress={() => { setWallMode(false); setPending(null); }}
-                disabled={busy}
-                accessibilityRole="button"
-                hitSlop={8}
-                style={styles.dTextBtn}
-              >
-                <Text style={styles.dTextBtnLabel}>벽 그만</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-        <Text style={[styles.dHint, dragIllegal || pendingIllegal ? styles.hintBad : null]}>{hint}</Text>
-      </View>
-    );
-  };
-
   const renderResult = (g: WallRaceGame) => (
     <View style={[styles.card, styles.resultCard]}>
       <MaterialCommunityIcons name="trophy-outline" size={26} color="#7A5C3A" />
@@ -954,7 +340,7 @@ export function WallRaceScreen({ navigation }: Props) {
         {g.winner === 'ME' ? '이겼어요!' : `${g.partnerName ?? '상대'}가 이겼어요`}
       </Text>
       <Text style={styles.cardDesc}>{g.moveCount}수 · 채팅에 결과 카드를 남겼어요.</Text>
-      {renderBoard(g, false)}
+      {renderBoard(g)}
     </View>
   );
 
@@ -972,6 +358,14 @@ export function WallRaceScreen({ navigation }: Props) {
         <Text style={styles.record}>전적 {record.me}승 {record.partner}패</Text>
       ) : null}
       <Button title="판 열기" onPress={start} loading={starting} style={styles.startBtn} />
+      {/* 연습 판 — 앱 안에서만 돌고 기록에 남지 않는다(docs/game-practice-tutorial_2026-10-13.md) */}
+      <Button
+        title="AI와 연습하기"
+        variant="ghost"
+        size="sm"
+        onPress={() => navigation.navigate('WallRacePractice')}
+        style={styles.practiceBtn}
+      />
     </View>
   );
 
@@ -1077,8 +471,19 @@ export function WallRaceScreen({ navigation }: Props) {
       {renderOpponentCard(g)}
       {!g.myTurn && !g.undoRequest ? <GameNudgeButton gameId={g.id} partnerName={g.partnerName} /> : null}
       {renderHandicap(g)}
-      <View style={styles.dBoardWrap}>{renderBoard(g, g.myTurn && !busy && !g.undoRequest)}</View>
-      {g.undoRequest ? renderUndoBanner(g) : renderActionBar(g)}
+      {/* 판 + 벽 트레이(끌어 놓기) — 고르던 벽은 수가 바뀌거나 무르기 요청이 생기면 저절로 비워진다 */}
+      <WallRaceBoard
+        view={g}
+        size={boardSize}
+        interactive={g.myTurn && !busy && !g.undoRequest}
+        busy={busy}
+        faces={faces}
+        resetKey={`${g.id}:${g.moveCount}:${g.undoRequest ?? ''}`}
+        onMove={movePawn}
+        onWall={placeWall}
+        onDragChange={setDragging}
+        belowBoard={g.undoRequest ? renderUndoBanner(g) : undefined}
+      />
       {renderMyCard(g)}
       <GameReactionBar gameType="WALL_RACE" />
     </View>
@@ -1120,7 +525,7 @@ export function WallRaceScreen({ navigation }: Props) {
         windowSize={5}
         refreshing={loading}
         onRefresh={() => load()}
-        scrollEnabled={!drag}
+        scrollEnabled={!dragging}
         ListHeaderComponent={header}
         renderItem={({ item }) => (
           /*
@@ -1141,7 +546,7 @@ export function WallRaceScreen({ navigation }: Props) {
               {item.moveCount}수 · 쓴 벽 나 {item.myWallsStart - item.myWallsLeft} · 상대{' '}
               {item.partnerWallsStart - item.partnerWallsLeft}
             </Text>
-            <View style={styles.histBoard}>{renderBoard(item, false, historyBoardSize)}</View>
+            <View style={styles.histBoard}>{renderBoard(item, historyBoardSize)}</View>
           </View>
         )}
         ListEmptyComponent={
@@ -1155,7 +560,15 @@ export function WallRaceScreen({ navigation }: Props) {
           ) : null
         }
       />
-      <GameHelpSheet game="WALL_RACE" visible={help.visible} onClose={help.close} />
+      <GameHelpSheet
+        game="WALL_RACE"
+        visible={help.visible}
+        onClose={help.close}
+        onPractice={() => {
+          help.close();
+          navigation.navigate('WallRacePractice');
+        }}
+      />
       <GamePieceSheet
         visible={pieceSheet}
         onClose={() => setPieceSheet(false)}
@@ -1187,6 +600,7 @@ const styles = themedStyles((colors) => ({
   bold: { fontWeight: '800', color: colors.textPrimary },
   record: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   startBtn: { marginTop: spacing.md },
+  practiceBtn: { alignSelf: 'center', marginTop: spacing.xs },
   resultCard: { alignItems: 'center', gap: spacing.xs },
   resultTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
 
@@ -1221,58 +635,6 @@ const styles = themedStyles((colors) => ({
     marginBottom: spacing.sm,
   },
 
-  board: {
-    alignSelf: 'center',
-    backgroundColor: BOARD_BG,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BOARD_FRAME,
-    overflow: 'hidden',
-  },
-  cell: { position: 'absolute', backgroundColor: CELL_BG, borderRadius: 3 },
-  moveHit: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  moveDot: { position: 'absolute', borderWidth: 2.5, borderColor: PAWN_ME, backgroundColor: withAlpha(PAWN_ME, 0.18) },
-  pawnBox: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  pawnBase: { position: 'absolute', opacity: 0.85 },
-  pawnFallback: { alignItems: 'center', marginTop: -2 },
-  wall: { position: 'absolute', backgroundColor: WALL_COLOR, borderRadius: 2 },
-  wallPreview: { opacity: 0.45 },
-  wallIllegal: { backgroundColor: colors.danger, opacity: 0.7 },
-  confirmRow: { position: 'absolute', flexDirection: 'row', gap: 6 },
-  confirmBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  confirmBtnOk: { backgroundColor: PAWN_ME },
-  confirmBtnOff: { backgroundColor: GROOVE },
-  confirmBtnCancel: { backgroundColor: D_CARD, borderWidth: 1, borderColor: GROOVE },
-  confirmPressed: { opacity: 0.7 },
-  confirmText: { color: '#FFFFFF', fontWeight: '800', fontSize: fontSize.caption },
-  tray: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
-  /* 벽 트레이 — PathLock 처럼 가로 조각은 넓게, 세로 조각은 높게 */
-  trayPiece: {
-    height: 56,
-    minWidth: 56,
-    paddingHorizontal: spacing.md,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: D_LINE,
-    backgroundColor: D_CARD,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trayPieceOn: { borderColor: PAWN_ME, borderWidth: 2 },
-  trayPieceOff: { opacity: 0.4 },
-  trayWallH: { width: 56, height: 10, borderRadius: 5 },
-  trayWallV: { width: 10, height: 38, borderRadius: 5 },
-  trayCount: { alignItems: 'center', marginLeft: spacing.xs },
-  trayCountNum: { fontSize: fontSize.subtitle, fontWeight: '800', color: D_TEXT },
-  trayCountLabel: { fontSize: 10, color: D_SUB, fontWeight: '700' },
 
   /* ── 두는 화면(어두운 게임판) ── */
   dRoot: { gap: spacing.sm },
@@ -1308,19 +670,11 @@ const styles = themedStyles((colors) => ({
   dCountLabel: { fontSize: 11, fontWeight: '700', color: D_SUB },
   dAvatar: { width: 44, height: 44 },
   dAvatarHint: { fontSize: 10, fontWeight: '700', color: D_SUB, textAlign: 'center', marginTop: 2 },
-  dBoardWrap: { alignItems: 'center', paddingVertical: spacing.xs },
   dHint: { fontSize: fontSize.caption, color: D_SUB, lineHeight: 18 },
   dTextBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   dTextBtnLabel: { fontSize: fontSize.caption, fontWeight: '800', color: D_TEXT },
   dBanner: { backgroundColor: D_CARD, borderRadius: 14, borderWidth: 1, borderColor: PAWN_PARTNER, padding: spacing.md, gap: spacing.sm },
   dBannerText: { fontSize: fontSize.body, color: D_TEXT, fontWeight: '700' },
-  hintBad: { color: colors.danger, fontWeight: '700' },
-  /* 마지막 수 표시 — 말에는 테두리, 벽에는 후광. 둘 다 판 색과 다른 쪽으로 튀어야 눈에 걸린다 */
-  lastRing: { position: 'absolute', borderWidth: 2, borderColor: '#F5A524' },
-  lastWall: { position: 'absolute', backgroundColor: '#F5A524', borderRadius: 3 },
-  joint: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  jointDot: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: GROOVE },
-  jointDotOn: { backgroundColor: WALL_COLOR },
 
   actionRow: {
     flexDirection: 'row',
@@ -1329,7 +683,6 @@ const styles = themedStyles((colors) => ({
     gap: spacing.sm,
     marginTop: spacing.md,
   },
-  wallPanel: { marginTop: spacing.md },
   hint: { flex: 1, fontSize: fontSize.caption, color: colors.textSecondary, lineHeight: 18 },
   giveUp: { alignSelf: 'center', marginTop: spacing.xs },
   undoAsk: {

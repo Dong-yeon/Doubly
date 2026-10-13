@@ -48,6 +48,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Puyo: undefined;
   /** 길막기 — 9×9 벽쌓기 턴제 */
   WallRace: undefined;
+  /** 길막기 연습 — 튜토리얼 + AI 대전, 앱 안에서만(기록 없음) */
+  WallRacePractice: undefined;
   /** 넷이 같아(내부 키 QUARTO) — 4×4, 상대가 준 말을 놓고 줄 말을 고르는 턴제 */
   Quarto: undefined;
   /** 넷이 같아 연습 — 튜토리얼 + AI 대전, 앱 안에서만(기록 없음) */

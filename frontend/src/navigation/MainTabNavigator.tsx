@@ -65,6 +65,7 @@ const HIDE_TAB_BAR_ON = new Set([
   'Omok',
   'OmokPractice',
   'WallRace',
+  'WallRacePractice',
   'CatchMind',
   'Puyo',
   'Quarto',

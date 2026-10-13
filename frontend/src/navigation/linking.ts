@@ -176,6 +176,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               CatchMind: 'game/catch-mind',
               Puyo: 'game/puzzle',
               WallRace: 'game/wall-race',
+              WallRacePractice: 'game/wall-race/practice',
               // PushLinks.GAME_QUARTO — 웹 주소창에 보이므로 내부 키(quarto) 대신 중립적인 경로
               Quarto: 'game/four',
               QuartoPractice: 'game/four/practice',
