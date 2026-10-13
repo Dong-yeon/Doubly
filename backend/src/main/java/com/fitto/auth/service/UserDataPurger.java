@@ -149,6 +149,11 @@ public class UserDataPurger {
         exec("delete from subscriptions where user_id = :uid", userId);
         // 기능 크레딧(V106) — subscriptions 와 같은 판단. users FK 라 빠뜨리면 탈퇴가 FK 위반으로 실패한다.
         exec("delete from feature_credits where user_id = :uid", userId);
+        // 유료 재화(V140) — 지갑·스토어 구매는 users FK 라 빠뜨리면 탈퇴가 실패한다. 원장은 FK 가 없어 DB 가 대신 지워주지
+        // 않으므로 명시적으로 거둔다. 회계 기록 보존(익명화) 여부는 법무 확인 전 — docs/CURRENCY_EMOJI_2026-10-13.md §10-6
+        exec("delete from currency_ledger where user_id = :uid", userId);
+        exec("delete from currency_store_purchases where user_id = :uid", userId);
+        exec("delete from currency_wallets where user_id = :uid", userId);
         /*
          * AI 토큰 사용량(V89) — user_id 에 FK 가 없어서 탈퇴를 막지는 않지만, 그래서 오히려
          * 여기서 빠뜨리면 조용히 남는다. 탈퇴한 사람의 사용 이력을 들고 있을 이유가 없다

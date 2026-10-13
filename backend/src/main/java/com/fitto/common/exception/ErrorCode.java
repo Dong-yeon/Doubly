@@ -108,6 +108,13 @@ public enum ErrorCode {
     AI_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "이미 만들고 있어요. 잠시만 기다려주세요."),
     /** 세트의 다시 그리기를 다 썼다 — 결제로 풀리는 잠금이 아니라 세트 안의 잔량이라 402 가 아니다. */
     COUPLE_EMOJI_REGEN_EXHAUSTED(HttpStatus.CONFLICT, "이 세트의 다시 그리기를 모두 썼어요."),
+    /**
+     * 재화가 모자란다 — 충전으로 풀리므로 402. 앱의 업그레이드 시트는 PLAN_* 코드만 보므로 이 코드로는 뜨지 않는다
+     * (api/client.ts) — 화면이 충전을 권한다.
+     */
+    CURRENCY_INSUFFICIENT(HttpStatus.PAYMENT_REQUIRED, "재화가 모자라요. 충전한 뒤 다시 시도해주세요."),
+    /** 카탈로그에 없거나 내린 상품 */
+    SHOP_ITEM_UNAVAILABLE(HttpStatus.NOT_FOUND, "지금은 살 수 없는 상품이에요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
     /* 이미지 생성이 안전 필터에 걸림(우리 이모지) — 같은 사진을 다시 보내도 같은 답이라 재시도가 아니라
      * "다른 사진"을 권해야 한다. AI_ANALYSIS_FAILED 의 "잠시 후" 문구는 여기 맞지 않는다. */
