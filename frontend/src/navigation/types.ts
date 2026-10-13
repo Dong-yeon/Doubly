@@ -40,6 +40,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Sudoku: undefined;
   // 오목 — 번갈아 두는 5목. 판을 연 사람이 백(후공)
   Omok: undefined;
+  /** 오목 연습 — 튜토리얼 + AI 대전, 앱 안에서만(기록 없음) */
+  OmokPractice: undefined;
   // 캐치마인드 — 한 명이 그리고 한 명이 맞힌다(비동기). docs/CATCH_MIND_2026-09-14.md
   CatchMind: undefined;
   // 연쇄 퍼즐(뿌요뿌요형) — 지금은 로컬 1인 플레이. docs/COUPLE_PUZZLE_BATTLE_2026-09-18.md

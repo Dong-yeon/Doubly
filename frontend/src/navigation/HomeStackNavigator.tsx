@@ -23,6 +23,7 @@ import { DailyQuestionScreen } from '../screens/home/DailyQuestionScreen';
 import { MiniGamesScreen } from '../screens/home/MiniGamesScreen';
 import { SudokuScreen } from '../screens/home/SudokuScreen';
 import { OmokScreen } from '../screens/home/OmokScreen';
+import { OmokPracticeScreen } from '../screens/home/OmokPracticeScreen';
 import { CatchMindScreen } from '../screens/home/CatchMindScreen';
 import { PuyoScreen } from '../screens/home/PuyoScreen';
 import { WallRaceScreen } from '../screens/home/WallRaceScreen';
@@ -76,6 +77,7 @@ export function HomeStackNavigator() {
       <Stack.Screen name="MiniGames" component={MiniGamesScreen} options={{ title: '미니게임' }} />
       <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: '협동 스도쿠' }} />
       <Stack.Screen name="Omok" component={OmokScreen} options={{ title: '오목' }} />
+      <Stack.Screen name="OmokPractice" component={OmokPracticeScreen} options={{ title: '오목 연습' }} />
       <Stack.Screen
         name="WallRace"
         component={WallRaceScreen}

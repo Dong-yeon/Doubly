@@ -63,6 +63,7 @@ const HIDE_TAB_BAR_ON = new Set([
   'ChatRoom',
   'Sudoku',
   'Omok',
+  'OmokPractice',
   'WallRace',
   'CatchMind',
   'Puyo',

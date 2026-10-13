@@ -17,6 +17,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { GameReactionBar } from '../../components/GameReactionBar';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { omokApi } from '../../api/game';
+import { OmokBoard } from '../../components/omok/OmokBoard';
 import { GameHelpButton, GameHelpSheet, useGameHelp } from '../../components/GameHelpSheet';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
@@ -33,13 +34,11 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'Omok'>;
 
 const SIZE = 15;
 const CELLS = SIZE * SIZE;
-/** 화점(별) — 판의 기준점. 15줄 판의 관행 위치 */
-const STAR_POINTS = new Set([3 * SIZE + 3, 3 * SIZE + 11, 7 * SIZE + 7, 11 * SIZE + 3, 11 * SIZE + 11]);
 
 /** 착수 요청 순번 — 옛 응답이 새 판 상태를 덮지 않도록(SudokuScreen 과 같은 이유로 모듈 변수) */
 let placeSeq = 0;
 
-export function OmokScreen(_: Props) {
+export function OmokScreen({ navigation }: Props) {
   const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
   // 처음 들어오면 하는 법이 한 번 뜬다(2026-10-12 — 처음 하는 사람에겐 규칙이 가장 큰 벽)
@@ -242,8 +241,6 @@ export function OmokScreen(_: Props) {
   // ── 판 ─────────────────────────────────────────────────────────────
 
   const boardSize = Math.min(width - spacing.lg * 2, 420);
-  const cell = boardSize / SIZE;
-  const stoneSize = Math.max(12, cell * 0.78);
 
   // 전적은 서버가 센 값(끝낸 판 전부). 기록 목록은 최근 20판뿐이라 21판째부터 줄어든다(8-1 #9)
   const record = useMemo(
@@ -255,91 +252,18 @@ export function OmokScreen(_: Props) {
     [serverRecord, history],
   );
 
-  const renderBoard = (g: OmokGame, interactive: boolean) => {
-    const winning = new Set(g.winningLine ?? []);
-    // 색은 내 돌/상대 돌이 아니라 흑/백으로 그린다 — 오목의 관행이고 둘의 화면이 같아 보여야 대화가 된다
-    const myIsBlack = g.myColor === 'BLACK';
-    /*
-     * 최근 세 수에 옅은 테두리를 남긴다 — 며칠 만에 들어왔을 때 "어디까지 뒀더라"가
-     * 마지막 점 하나로는 안 읽힌다. 가장 최근 수는 이미 점이 있으므로 2·3번째만 그린다.
-     */
-    const recentRank = new Map<number, number>();
-    (g.moves ?? []).slice(-3).forEach((idx, i, arr) => recentRank.set(idx, arr.length - 1 - i));
-    const ringSize = Math.min(cell, stoneSize + 4);
-    return (
-      <View style={[styles.board, { width: boardSize, height: boardSize }]}>
-        {Array.from({ length: CELLS }, (_, index) => {
-          const row = Math.floor(index / SIZE);
-          const col = index % SIZE;
-          const s = g.stones[index];
-          const isBlack = s === 'M' ? myIsBlack : s === 'P' ? !myIsBlack : false;
-          const half = cell / 2;
-          return (
-            <Pressable
-              key={index}
-              disabled={!interactive}
-              onPress={() => place(index)}
-              accessibilityRole="button"
-              accessibilityLabel={`${row + 1}행 ${col + 1}열 ${s === '0' ? '빈 자리' : isBlack ? '흑돌' : '백돌'}`}
-              style={{ width: cell, height: cell }}
-            >
-              {/* 격자선 — 가장자리는 판 중앙 쪽 절반만 그려 교차점이 선 끝에 오게 한다 */}
-              <View
-                style={[
-                  styles.lineH,
-                  { top: half - 0.5, left: col === 0 ? half : 0, right: col === SIZE - 1 ? half : 0 },
-                ]}
-              />
-              <View
-                style={[
-                  styles.lineV,
-                  { left: half - 0.5, top: row === 0 ? half : 0, bottom: row === SIZE - 1 ? half : 0 },
-                ]}
-              />
-              {STAR_POINTS.has(index) && s === '0' ? (
-                <View style={[styles.star, { left: half - 2.5, top: half - 2.5 }]} />
-              ) : null}
-              {recentRank.get(index) ? (
-                <View
-                  style={[
-                    styles.recentRing,
-                    {
-                      width: ringSize,
-                      height: ringSize,
-                      borderRadius: ringSize / 2,
-                      left: half - ringSize / 2,
-                      top: half - ringSize / 2,
-                      opacity: recentRank.get(index) === 1 ? 0.5 : 0.25,
-                    },
-                  ]}
-                />
-              ) : null}
-              {s !== '0' ? (
-                <View
-                  style={[
-                    styles.stone,
-                    isBlack ? styles.stoneBlack : styles.stoneWhite,
-                    winning.has(index) && styles.stoneWinning,
-                    {
-                      width: stoneSize,
-                      height: stoneSize,
-                      borderRadius: stoneSize / 2,
-                      left: half - stoneSize / 2,
-                      top: half - stoneSize / 2,
-                    },
-                  ]}
-                >
-                  {g.lastMove === index ? (
-                    <View style={[styles.lastDot, isBlack ? styles.lastDotOnBlack : styles.lastDotOnWhite]} />
-                  ) : null}
-                </View>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  };
+  const renderBoard = (g: OmokGame, interactive: boolean) => (
+    <OmokBoard
+      stones={g.stones}
+      myIsBlack={g.myColor === 'BLACK'}
+      size={boardSize}
+      interactive={interactive}
+      onPress={place}
+      winningLine={g.winningLine}
+      lastMove={g.lastMove}
+      moves={g.moves}
+    />
+  );
 
   const renderTurnBar = (g: OmokGame) => (
     <View style={styles.turnRow}>
@@ -503,6 +427,14 @@ export function OmokScreen(_: Props) {
         </Text>
       ) : null}
       <Button title="판 열기" onPress={start} loading={starting} style={styles.startBtn} />
+      {/* 연습 판 — 앱 안에서만 돌고 기록에 남지 않는다(docs/game-practice-tutorial_2026-10-13.md) */}
+      <Button
+        title="AI와 연습하기"
+        variant="ghost"
+        size="sm"
+        onPress={() => navigation.navigate('OmokPractice')}
+        style={styles.practiceBtn}
+      />
     </View>
   );
 
@@ -585,7 +517,15 @@ export function OmokScreen(_: Props) {
           ) : null
         }
       />
-      <GameHelpSheet game="OMOK" visible={help.visible} onClose={help.close} />
+      <GameHelpSheet
+        game="OMOK"
+        visible={help.visible}
+        onClose={help.close}
+        onPractice={() => {
+          help.close();
+          navigation.navigate('OmokPractice');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -607,6 +547,7 @@ const styles = themedStyles((colors) => ({
   cardDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18 },
   record: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   startBtn: { marginTop: spacing.md },
+  practiceBtn: { alignSelf: 'center', marginTop: spacing.xs },
   resultCard: { alignItems: 'center', gap: spacing.xs },
   resultTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
 
@@ -629,32 +570,13 @@ const styles = themedStyles((colors) => ({
   turnHint: { flex: 1, textAlign: 'center', fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   miniStone: { width: 12, height: 12, borderRadius: 6 },
 
-  board: {
-    alignSelf: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    // 나무색 판 — 일러스트 고유값이라 테마 토큰을 쓰지 않는다(다크에서도 같은 판이어야 돌 색이 읽힌다)
-    backgroundColor: '#E8C48A',
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-  lineH: { position: 'absolute', height: 1, backgroundColor: '#8B6A3A' },
-  lineV: { position: 'absolute', width: 1, backgroundColor: '#8B6A3A' },
-  star: { position: 'absolute', width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#8B6A3A' },
-  stone: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   stoneBlack: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#000000' },
   stoneWhite: { backgroundColor: '#F7F5EF', borderWidth: 1, borderColor: '#9A9A9A' },
-  stoneWinning: { borderWidth: 2, borderColor: colors.primary },
-  lastDot: { width: 5, height: 5, borderRadius: 2.5 },
-  lastDotOnBlack: { backgroundColor: '#F7F5EF' },
-  lastDotOnWhite: { backgroundColor: '#1E1E1E' },
 
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.md, lineHeight: 18 },
   giveUp: { alignSelf: 'center', marginTop: spacing.xs },
   pressed: { opacity: 0.6 },
 
-  /* 최근 세 수 표시 — 가장 최근 수는 점이 있으므로 2·3번째만 옅은 테두리로 남긴다 */
-  recentRing: { position: 'absolute', borderWidth: 2, borderColor: colors.primary },
 
   undoBtn: { alignSelf: 'center', marginTop: spacing.sm },
   undoWaiting: {
