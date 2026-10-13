@@ -177,6 +177,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
               WallRace: 'game/wall-race',
               // PushLinks.GAME_QUARTO — 웹 주소창에 보이므로 내부 키(quarto) 대신 중립적인 경로
               Quarto: 'game/four',
+              QuartoPractice: 'game/four/practice',
               CoupleCalendar: 'calendar',
               My: 'my',
               Settings: 'settings',

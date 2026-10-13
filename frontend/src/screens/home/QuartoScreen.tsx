@@ -35,16 +35,8 @@ import { Alert } from '../../utils/alert';
 import { haptics } from '../../utils/haptics';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { QUARTO_DISPLAY_NAME } from '../../constants/quarto';
-import {
-  CELLS,
-  EMPTY,
-  PIECES,
-  SIZE,
-  commonTraitLabels,
-  describePiece,
-  pieceTraits,
-  previewPlace,
-} from '../../games/quarto';
+import { CELLS, EMPTY, SIZE, commonTraitLabels, describePiece, previewPlace } from '../../games/quarto';
+import { QuartoBoard, type QuartoBoardProps, QuartoHand, QuartoTray, lastPlaceOf } from '../../components/quarto/QuartoParts';
 import type { GameRecord, QuartoGame, QuartoMoveBody } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
 
@@ -53,47 +45,7 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'Quarto'>;
 /** 수 요청 순번 — 옛 응답이 새 판 상태를 덮지 않도록(OmokScreen 과 같은 이유로 모듈 변수) */
 let moveSeq = 0;
 
-const BOARD_GAP = 6;
-
-/**
- * 말 하나 — 크기 칸(size) 안에 가운데 정렬로 그린다.
- * 색: chart1(잉크)/chart3(호박) — 앱에 secondary 토큰이 없고, primary 는 포인트 색 테마 14종을 따라 바뀌어
- * 둘째 색과 겹칠 수 있어 테마와 무관하게 고정된 차트 색 짝을 쓴다(verify:theme 가 둘의 거리를 본다).
- */
-function Piece({ piece, size, ghost }: { piece: number; size: number; ghost?: boolean }) {
-  const t = pieceTraits(piece);
-  const tint = t.color === 0 ? colors.chart1 : colors.chart3;
-  const body = t.big ? size : size * 0.6;
-  const ring = Math.max(3, body * 0.2);
-  const dot = Math.max(4, body * 0.2);
-  return (
-    <View
-      style={[styles.pieceBox, { width: size, height: size, opacity: ghost ? 0.5 : 1 }]}
-      accessible
-      accessibilityLabel={describePiece(piece)}
-    >
-      <View
-        style={{
-          width: body,
-          height: body,
-          borderRadius: t.round ? body / 2 : body * 0.2,
-          backgroundColor: t.solid ? tint : 'transparent',
-          borderWidth: t.solid ? 0 : ring,
-          borderColor: tint,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {/* 둘째 색 표시 — 색을 못 가려도 점으로 구분된다 */}
-        {t.color === 1 ? (
-          <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: t.solid ? colors.surface : tint }} />
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-export function QuartoScreen(_: Props) {
+export function QuartoScreen({ navigation }: Props) {
   const width = useContentWidth();
   const relationId = useRelationStore((s) => s.couple?.id);
   const help = useGameHelp('QUARTO');
@@ -299,7 +251,6 @@ export function QuartoScreen(_: Props) {
   // ── 그리기 ──────────────────────────────────────────────────────────
 
   const boardSize = Math.min(width - spacing.lg * 2, 360);
-  const cell = (boardSize - BOARD_GAP * (SIZE + 1)) / SIZE;
   const traySlot = Math.min(44, (width - spacing.lg * 2 - spacing.xs * 7) / 8);
 
   const record = useMemo(
@@ -311,44 +262,9 @@ export function QuartoScreen(_: Props) {
     [serverRecord, history],
   );
 
-  const renderBoard = (
-    board: number[],
-    opts: { interactive?: boolean; ghostAt?: number | null; ghostPiece?: number | null; highlight?: number[] | null; lastPlace?: number | null },
-  ) => {
-    const lit = new Set(opts.highlight ?? []);
-    return (
-      <View style={[styles.board, { width: boardSize, padding: BOARD_GAP, gap: BOARD_GAP }]}>
-        {Array.from({ length: SIZE }, (_, row) => (
-          <View key={row} style={[styles.boardRow, { gap: BOARD_GAP }]}>
-            {Array.from({ length: SIZE }, (__, col) => {
-              const index = row * SIZE + col;
-              const p = board[index];
-              const ghost = opts.ghostAt === index && opts.ghostPiece != null;
-              const shown = ghost ? (opts.ghostPiece as number) : p;
-              return (
-                <Pressable
-                  key={index}
-                  disabled={!opts.interactive || p !== EMPTY}
-                  onPress={() => tapCell(index)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${row + 1}행 ${col + 1}열 ${p === EMPTY ? (ghost ? '여기 놓아 보는 중' : '빈 칸') : describePiece(p)}`}
-                  style={[
-                    styles.cell,
-                    { width: cell, height: cell },
-                    opts.lastPlace === index && styles.cellLast,
-                    opts.ghostAt === index && styles.cellPicked,
-                    lit.has(index) && styles.cellLit,
-                  ]}
-                >
-                  {shown !== EMPTY ? <Piece piece={shown} size={cell * 0.8} ghost={ghost && !lit.has(index)} /> : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
-      </View>
-    );
-  };
+  const renderBoard = (board: number[], opts: Omit<QuartoBoardProps, 'board' | 'size' | 'onCellPress'>) => (
+    <QuartoBoard board={board} size={boardSize} onCellPress={tapCell} {...opts} />
+  );
 
   /** 놓을 말(또는 내가 준 말)을 크게 — 판 위에 둔다 */
   const renderHand = (g: QuartoGame) => {
@@ -358,52 +274,13 @@ export function QuartoScreen(_: Props) {
     else if (g.myTurn) label = `${partner}가 준 말`;
     else if (g.pendingPiece != null) label = '내가 준 말';
     else label = `${partner}가 건넬 말을 고르는 중`;
-    return (
-      <View style={styles.hand}>
-        <View style={styles.handPiece}>
-          {g.pendingPiece != null ? <Piece piece={g.pendingPiece} size={72} /> : (
-            <MaterialCommunityIcons name="dots-horizontal" size={28} color={colors.textMuted} />
-          )}
-        </View>
-        <View style={styles.handText}>
-          <Text style={styles.handLabel}>{label}</Text>
-          {g.pendingPiece != null ? <Text style={styles.handDesc}>{describePiece(g.pendingPiece)}</Text> : null}
-          <Text style={styles.handTurn}>
-            {g.myTurn ? '내 차례예요' : `${partner} 차례예요`} · {Math.max(0, g.moveNo - 1)}/{CELLS}칸
-          </Text>
-        </View>
-      </View>
-    );
+    const sub = `${g.myTurn ? '내 차례예요' : `${partner} 차례예요`} · ${Math.max(0, g.moveNo - 1)}/${CELLS}칸`;
+    return <QuartoHand piece={g.pendingPiece} label={label} sub={sub} />;
   };
 
-  /** 건넬 말 — 16자리를 고정해 두고 쓴 말은 빈 자리로 남긴다(위치가 흔들리지 않아 훑어보기 쉽다) */
-  const renderTray = (available: number[]) => {
-    const can = new Set(available);
-    return (
-      <View style={styles.trayWrap}>
-        <Text style={styles.trayTitle}>건넬 말 고르기</Text>
-        <View style={[styles.tray, { gap: spacing.xs }]}>
-          {Array.from({ length: PIECES }, (_, p) => {
-            const ok = can.has(p);
-            const picked = selGive === p;
-            return (
-              <Pressable
-                key={p}
-                disabled={!ok || sending}
-                onPress={() => tapTray(p)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: picked, disabled: !ok }}
-                accessibilityLabel={ok ? `${describePiece(p)} 건네기` : '이미 쓴 말'}
-                style={[styles.traySlot, { width: traySlot, height: traySlot }, picked && styles.traySlotPicked]}
-              >
-                {ok ? <Piece piece={p} size={traySlot * 0.82} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
+  const renderTray = (available: number[]) => (
+    <QuartoTray available={available} selected={selGive} onSelect={tapTray} disabled={sending} slot={traySlot} />
+  );
 
   const renderActions = (g: QuartoGame) => {
     if (!g.myTurn) return null;
@@ -446,14 +323,6 @@ export function QuartoScreen(_: Props) {
     return labels.length > 0 ? labels.join(' · ') : null;
   };
 
-  const lastPlaceOf = (g: QuartoGame) => {
-    for (let i = g.moves.length - 1; i >= 0; i -= 1) {
-      const m = g.moves[i];
-      if (m.place != null) return m.place;
-    }
-    return null;
-  };
-
   const renderResult = (g: QuartoGame) => {
     const title = g.winner === 'ME' ? '이겼어요!' : g.winner === 'PARTNER' ? `${g.partnerName ?? '상대'}가 이겼어요` : '무승부';
     const traits = winText(g);
@@ -468,7 +337,7 @@ export function QuartoScreen(_: Props) {
         <Text style={styles.cardDesc}>
           {traits ?? (g.winner === 'DRAW' ? '16칸이 다 찼는데 넷이 같은 줄이 없었어요.' : '')}
         </Text>
-        {renderBoard(g.board, { highlight: g.winLine, lastPlace: lastPlaceOf(g) })}
+        {renderBoard(g.board, { highlight: g.winLine, lastPlace: lastPlaceOf(g.moves) })}
         {g.moves.length > 0 ? (
           <Button title="복기 보기" variant="ghost" size="sm" onPress={() => setReplay({ game: g, step: 0 })} />
         ) : null}
@@ -540,7 +409,7 @@ export function QuartoScreen(_: Props) {
         ghostAt: selCell,
         ghostPiece: placing ? g.pendingPiece : null,
         highlight: preview?.winLine ?? null,
-        lastPlace: lastPlaceOf(g),
+        lastPlace: lastPlaceOf(g.moves),
       })}
       {renderActions(g)}
       {showTray ? renderTray(preview ? preview.remainingAfter : g.remainingPieces) : null}
@@ -566,6 +435,14 @@ export function QuartoScreen(_: Props) {
         </Text>
       ) : null}
       <Button title="판 열기" onPress={start} loading={starting} style={styles.startBtn} />
+      {/* 연습 판 — 앱 안에서만 돌고 기록에 남지 않는다(docs/game-practice-tutorial_2026-10-13.md) */}
+      <Button
+        title="AI와 연습하기"
+        variant="ghost"
+        size="sm"
+        onPress={() => navigation.navigate('QuartoPractice')}
+        style={styles.practiceBtn}
+      />
     </View>
   );
 
@@ -630,7 +507,15 @@ export function QuartoScreen(_: Props) {
           ) : null
         }
       />
-      <GameHelpSheet game="QUARTO" visible={help.visible} onClose={help.close} />
+      <GameHelpSheet
+        game="QUARTO"
+        visible={help.visible}
+        onClose={help.close}
+        onPractice={() => {
+          help.close();
+          navigation.navigate('QuartoPractice');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -652,71 +537,16 @@ const styles = themedStyles((colors) => ({
   cardDesc: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 18, textAlign: 'center' },
   record: { fontSize: fontSize.body, color: colors.textPrimary, fontWeight: '700', marginTop: spacing.sm },
   startBtn: { marginTop: spacing.md },
+  practiceBtn: { alignSelf: 'center', marginTop: spacing.xs },
   resultCard: { alignItems: 'center', gap: spacing.xs },
   resultTitle: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
 
-  hand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    marginBottom: spacing.sm,
-  },
-  handPiece: {
-    width: 88,
-    height: 88,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  handText: { flex: 1, gap: 2 },
-  handLabel: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
-  handDesc: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
-  handTurn: { fontSize: fontSize.caption, color: colors.textMuted, fontWeight: '700', marginTop: 2 },
 
-  board: {
-    alignSelf: 'center',
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: spacing.sm,
-  },
-  boardRow: { flexDirection: 'row' },
-  cell: {
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cellLast: { borderColor: colors.textMuted },
-  cellPicked: { borderColor: colors.primary },
-  cellLit: { borderColor: colors.success, borderWidth: 3, backgroundColor: colors.successBg },
-  pieceBox: { alignItems: 'center', justifyContent: 'center' },
 
   actions: { marginTop: spacing.md, gap: spacing.sm },
   hint: { fontSize: fontSize.caption, color: colors.textSecondary, textAlign: 'center', lineHeight: 18 },
   hintWin: { color: colors.success, fontWeight: '800' },
 
-  trayWrap: { marginTop: spacing.md },
-  trayTitle: { fontSize: fontSize.caption, fontWeight: '800', color: colors.textSecondary, marginBottom: spacing.xs },
-  tray: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
-  traySlot: {
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  traySlotPicked: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
 
   giveUp: { alignSelf: 'center', marginTop: spacing.xs },
   pressed: { opacity: 0.6 },

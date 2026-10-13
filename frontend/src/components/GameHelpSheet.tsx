@@ -38,7 +38,21 @@ export function useGameHelp(game: GameHelpKey) {
   return { visible, open, close };
 }
 
-export function GameHelpSheet({ game, visible, onClose }: { game: GameHelpKey; visible: boolean; onClose: () => void }) {
+/**
+ * @param onPractice 있으면 "AI와 연습해 보기" 단추를 띄운다 — 연습 판이 있는 게임만 넘긴다
+ *                   (docs/game-practice-tutorial_2026-10-13.md)
+ */
+export function GameHelpSheet({
+  game,
+  visible,
+  onClose,
+  onPractice,
+}: {
+  game: GameHelpKey;
+  visible: boolean;
+  onClose: () => void;
+  onPractice?: () => void;
+}) {
   const help = GAME_HELP[game];
   return (
     <Sheet visible={visible} onClose={onClose} position="bottom" cardStyle={styles.card}>
@@ -59,7 +73,10 @@ export function GameHelpSheet({ game, visible, onClose }: { game: GameHelpKey; v
             <Text style={styles.line}>{line}</Text>
           </View>
         ))}
-        <Button title="알겠어요" onPress={onClose} style={styles.ok} />
+        {onPractice ? (
+          <Button title="AI와 연습해 보기" variant="secondary" onPress={onPractice} style={styles.ok} />
+        ) : null}
+        <Button title="알겠어요" onPress={onClose} style={onPractice ? undefined : styles.ok} />
       </ScrollView>
     </Sheet>
   );
