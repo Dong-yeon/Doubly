@@ -87,9 +87,13 @@ public class DataExportService {
                  * 새 피드 글은 첫 사진을 image_url 과 feed_post_photos 에 둘 다 적는다(V79, 의도한 중복).
                  * 앱은 URL 로 한 번만 받으므로 세는 것도 사진 표에 없는 것(V79 이전 글)만 센다.
                  */
-                String extra = section == ExportSection.FEED_POSTS
-                        ? " AND NOT EXISTS (SELECT 1 FROM feed_post_photos ph WHERE ph.post_id = t.id AND ph.url = t.image_url)"
-                        : "";
+                String extra = switch (section) {
+                    case FEED_POSTS ->
+                            " AND NOT EXISTS (SELECT 1 FROM feed_post_photos ph WHERE ph.post_id = t.id AND ph.url = t.image_url)";
+                    // 일상 카드(V141)의 사진은 그 일상의 첫 사진 그대로다 — 위 사진 표에서 이미 셌다
+                    case CHAT_MESSAGES -> " AND t.message_type <> 'FEED_CARD'";
+                    default -> "";
+                };
                 long n = count("SELECT COUNT(t." + column + ") FROM " + section.from() + extra, params);
                 media += n;
                 if (isAudio(column)) audios += n;

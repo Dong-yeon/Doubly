@@ -2004,7 +2004,12 @@ export type MessageType =
    * 문구 스티커 — 캐릭터 스티커 위에 짧은 문구를 얹는다. content 는 문구 그대로, 스티커는 stickerCode.
    * 이 타입을 모르는 옛 앱은 content 를 글 말풍선으로 그려 문구가 그대로 읽힌다(STREAK_CARD 와 같은 규칙).
    */
-  | 'TEXT_STICKER';
+  | 'TEXT_STICKER'
+  /**
+   * 일상 카드(V141) — 일상을 올리면 서버가 대신 남긴다. content 는 글 그대로(사진만이면 "사진 N장"), imageUrl 은 첫 사진.
+   * 일상을 고치면 /updates 로 제자리 교체, 지우면 삭제 표시. 옛 앱에는 글이 말풍선으로 읽힌다.
+   */
+  | 'FEED_CARD';
 /** 메시지 이모지 리액션 — mine 은 userIds 에 내 id 가 있는지로 판단한다(브로드캐스트 공용) */
 export interface ChatReactionSummary {
   emoji: string;

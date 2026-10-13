@@ -531,6 +531,55 @@ public class ChatService {
     }
 
     /**
+     * 일상 카드 — {@link #postMealCard} 와 같은 원칙(자동 알림 없음 — 일상 푸시가 이미 간다, 브로드캐스트는 호출자).
+     * 첫 사진(imageUrl)과 원본 포스트 참조(feedPostId, V141)를 함께 싣는다. FeedService.createPost 참고.
+     */
+    @Transactional
+    public ChatMessageResponse postFeedCard(Long senderId, Long relationId, String content, String imageUrl,
+                                            Long feedPostId) {
+        requireMember(senderId, relationId);
+        ChatMessage message = ChatMessage.builder()
+                .relationId(relationId)
+                .senderId(senderId)
+                .messageType(MessageType.FEED_CARD)
+                .content(content)
+                .imageUrl(imageUrl)
+                .feedPostId(feedPostId)
+                .build();
+        chatMessageRepository.save(message);
+        return ChatMessageResponse.from(message);
+    }
+
+    /**
+     * 일상을 고쳤을 때 그 카드도 같은 글·첫 사진으로 — 제자리 교체 방송({@code /updates})용으로 바꾼 카드를 돌려준다.
+     * 이미 삭제된 카드(채팅에서 지운 것)는 되살리지 않는다.
+     */
+    @Transactional
+    public List<ChatMessageResponse> syncFeedCards(Long feedPostId, String content, String imageUrl) {
+        return chatMessageRepository.findByFeedPostId(feedPostId).stream()
+                .filter(m -> !m.isDeleted())
+                .map(m -> {
+                    m.syncFeedCard(content, imageUrl);
+                    return detailOf(m);
+                })
+                .toList();
+    }
+
+    /**
+     * {@link #detachWorkoutCards} 의 일상판 — feed_post_id FK(V141)를 끊고 삭제 표시한다. 사진 URL 도 비우므로
+     * 커밋 뒤 삭제기가 그 파일을 지울 수 있다. 제자리 교체 방송용으로 바뀐 카드를 돌려준다.
+     */
+    @Transactional
+    public List<ChatMessageResponse> detachFeedCards(Long feedPostId) {
+        return chatMessageRepository.findByFeedPostId(feedPostId).stream()
+                .map(m -> {
+                    m.detachDeletedFeedPost();
+                    return detailOf(m);
+                })
+                .toList();
+    }
+
+    /**
      * 시스템 카드 게시 결과 — 호출자가 어느 토픽으로 브로드캐스트할지 갈라야 해서 접혔는지를 함께 돌려준다
      * (새 카드는 {@code /sub/rooms/{id}}, 접힌 카드는 제자리 교체용 {@code /sub/rooms/{id}/updates}).
      */
@@ -892,6 +941,7 @@ public class ChatService {
             case TEXT_STICKER -> "[스티커] " + message.getContent();
             case WORKOUT_CARD -> "[운동 기록]";
             case MEAL_CARD -> "[식단]";
+            case FEED_CARD -> "[일상] " + message.getContent();
             case ROUTINE_CARD -> "[루틴]";
             // 알 수 없는 코드는 이론상 오지 않는다(전송 시점에 검증됨) — 방어적으로만 처리
             case TOUCH -> "[" + TouchGesture.from(message.getContent()).map(TouchGesture::label).orElse("터치") + "]";

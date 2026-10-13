@@ -24,6 +24,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     /** 장소를 참조하는 럽슐랭 카드(PLACE_CARD) — 장소 삭제 시 함께 정리한다(PlaceService.delete). */
     List<ChatMessage> findByPlaceId(Long placeId);
 
+    /** 일상 포스트를 참조하는 카드(FEED_CARD) — 고치기·삭제 때 따라 바꾼다(FeedService). */
+    List<ChatMessage> findByFeedPostId(Long feedPostId);
+
     /** 방 메시지 — 커서(id) 기반 최신순 페이징. */
     @Query("""
             select m from ChatMessage m

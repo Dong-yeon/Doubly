@@ -109,6 +109,7 @@ class DataExportFlowTest {
 
         ExportSummaryResponse summary = exportService.summary(c[1]);
         assertThat(summary.coupled()).isTrue();
+        // 음성 1개 — 일상 카드(FEED_CARD, V141)가 자동으로 실은 첫 사진은 일상 사진과 같은 파일이라 세지 않는다
         assertThat(summary.sections()).filteredOn(s -> s.key().equals("chat_messages"))
                 .extracting(SectionCount::mediaCount).containsExactly(1L);
         // 사진 2장 + 음성 1개 — 첫 사진이 image_url 과 사진 표에 겹쳐 있어도 한 번만 센다(V79)

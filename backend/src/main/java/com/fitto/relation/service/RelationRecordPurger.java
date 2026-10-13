@@ -64,6 +64,9 @@ public class RelationRecordPurger {
         // 일상 댓글(V124) — feed_posts 삭제가 CASCADE 로 함께 지우지만, 순서를 여기서 읽을 수 있게 먼저 거둔다
         exec("delete from feed_comments where post_id in "
                 + "(select p.id from feed_posts p where p.couple_id = :rid)", relationId);
+        // 일상 카드(chat_messages.feed_post_id, V141)가 feed_posts 를 참조한다 — 채팅은 아래에서 통째로
+        // 지워지지만 피드가 먼저이므로 여기서 참조를 끊어 둔다(럽슐랭 카드의 place_id 와 같은 처리).
+        exec("update chat_messages set feed_post_id = null where relation_id = :rid", relationId);
         // feed_posts.trip_id 가 trips 를 참조하므로 피드를 먼저 지운다
         exec("delete from feed_posts where couple_id = :rid", relationId);
 
