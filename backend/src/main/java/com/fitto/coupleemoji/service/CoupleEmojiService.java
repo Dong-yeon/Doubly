@@ -445,6 +445,16 @@ public class CoupleEmojiService {
     }
 
     /**
+     * 쓰이지 않을 원본을 치운다 — 같은 요청이 두 번 와서 두 번째가 올린 사진(컨트롤러 멱등 처리).
+     * 전용 폴더의 것만 지운다({@link #isSourceUrl}) — 아무 URL 이나 받아 지우면 남의 사진을 지우는 경로가 된다.
+     */
+    public void discardSource(String sourceImageUrl) {
+        if (isSourceUrl(sourceImageUrl)) {
+            imageDeleter.deleteAll(List.of(sourceImageUrl));
+        }
+    }
+
+    /**
      * 접수 실패(AI 큐 포화) — {@link #prepare} 가 이미 한도를 차감했고 원본은 올라가 있는데 이제
      * {@link #generate} 는 돌지 않는다. 둘 다 되돌린다(2026-09-08 점검 #9). 컨트롤러가
      * {@code AiJobService.submit} 의 거절 콜백으로 부른다.

@@ -104,6 +104,8 @@ public enum ErrorCode {
     AI_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "지금은 AI 분석 요청이 많아요. 잠시 후 다시 시도해주세요."),
     /* 백그라운드 AI 작업(AiJobService)의 id 가 만료됐거나 남의 것 — 둘을 구분해 알려주지 않는다. */
     AI_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 AI 작업을 찾을 수 없어요. 다시 시도해주세요."),
+    /** 같은 요청 키가 아직 접수 중일 때 — 두 번 차감하지 않으려고 두 번째를 돌려보낸다(AiJobService.claimRequest). */
+    AI_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "이미 만들고 있어요. 잠시만 기다려주세요."),
     AI_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "AI 분석에 실패했어요. 잠시 후 다시 시도해주세요."),
     /* 이미지 생성이 안전 필터에 걸림(우리 이모지) — 같은 사진을 다시 보내도 같은 답이라 재시도가 아니라
      * "다른 사진"을 권해야 한다. AI_ANALYSIS_FAILED 의 "잠시 후" 문구는 여기 맞지 않는다. */

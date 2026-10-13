@@ -161,6 +161,112 @@ public class AiJobService {
         return jobId;
     }
 
+    // ---- 같은 요청 두 번 막기 ----
+
+    private static final String REQUEST_KEY_PREFIX = "fitto:ai:req:";
+    /** 저장값 = {@code jobId + SEP + payload}. 접수 중이면 jobId 자리가 비어 있다. */
+    private static final String SEP = "\n";
+
+    /**
+     * 먼저 온 같은 요청 — {@code jobId} 가 null 이면 아직 접수 중(차감·제출 전)이다.
+     *
+     * @param payload 먼저 온 요청이 맡긴 값(우리 이모지는 원본 URL) — 두 번째 요청이 <b>자기가 올린 것</b>을
+     *                치울지 가르는 데 쓴다. 같은 본문을 다시 보낸 것이면 그 파일은 먼저 온 작업의 것이다
+     */
+    public record RequestClaim(String jobId, String payload) {
+        public boolean pending() {
+            return jobId == null;
+        }
+    }
+
+    /**
+     * 같은 요청 키로 온 두 번째 요청인가 — <b>돈이 드는 접수</b>(우리 이모지)가 더블탭·네트워크 재시도로 두 번
+     * 차감되지 않게 한다(docs/EMOJI_12_REGEN_2026-10-13.md §1-3).
+     *
+     * <p>비어 있으면 이 호출이 키를 <b>선점</b>했다 — 접수를 계속하고 {@link #bindRequest} 로 jobId 를 묶는다(실패하면
+     * {@link #releaseRequest}). 값이 있으면 먼저 온 요청이다. 선점은 Redis {@code SET NX} 라 동시 도착에도 한 요청만
+     * 이긴다. Redis 가 없으면 인메모리로 같은 일을 한다.
+     */
+    public java.util.Optional<RequestClaim> claimRequest(Long userId, String label, String requestId, String payload) {
+        String key = requestKey(userId, label, requestId);
+        String pendingValue = SEP + nullToEmpty(payload);
+        StringRedisTemplate redis = redisProvider.getIfAvailable();
+        if (redis != null) {
+            try {
+                Boolean claimed = redis.opsForValue().setIfAbsent(key, pendingValue, RETENTION);
+                if (Boolean.TRUE.equals(claimed)) {
+                    return java.util.Optional.empty();
+                }
+                return java.util.Optional.of(parseClaim(redis.opsForValue().get(key)));
+            } catch (Exception e) {
+                log.debug("Redis 미가용 — 요청 키 인메모리 폴백: {}", e.getMessage());
+            }
+        }
+        synchronized (fallback) {
+            Entry entry = fallback.get(key);
+            if (entry != null && entry.expiresAt().isAfter(Instant.now())) {
+                return java.util.Optional.of(parseClaim(entry.json()));
+            }
+            fallback.put(key, new Entry(pendingValue, Instant.now().plus(RETENTION)));
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** 선점한 요청 키에 접수된 jobId 를 묶는다 — 다음에 같은 키가 오면 이 jobId 를 돌려준다. */
+    public void bindRequest(Long userId, String label, String requestId, String jobId, String payload) {
+        putRequest(requestKey(userId, label, requestId), jobId + SEP + nullToEmpty(payload));
+    }
+
+    private static RequestClaim parseClaim(String stored) {
+        if (stored == null) {
+            return new RequestClaim(null, "");   // 방금 풀렸거나 만료 — 접수 중으로 보고 다시 누르게 한다
+        }
+        int at = stored.indexOf(SEP);
+        String jobId = at < 0 ? stored : stored.substring(0, at);
+        String payload = at < 0 ? "" : stored.substring(at + SEP.length());
+        return new RequestClaim(jobId.isEmpty() ? null : jobId, payload);
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    /** 접수가 거절됐다(402·429·검증 실패) — 같은 키로 다시 시도할 수 있게 선점을 푼다. */
+    public void releaseRequest(Long userId, String label, String requestId) {
+        String key = requestKey(userId, label, requestId);
+        StringRedisTemplate redis = redisProvider.getIfAvailable();
+        if (redis != null) {
+            try {
+                redis.delete(key);
+            } catch (Exception e) {
+                log.debug("Redis 미가용 — 요청 키 해제 인메모리 폴백: {}", e.getMessage());
+            }
+        }
+        synchronized (fallback) {
+            fallback.remove(key);
+        }
+    }
+
+    private void putRequest(String key, String value) {
+        StringRedisTemplate redis = redisProvider.getIfAvailable();
+        if (redis != null) {
+            try {
+                redis.opsForValue().set(key, value, RETENTION);
+                return;
+            } catch (Exception e) {
+                log.debug("Redis 미가용 — 요청 키 인메모리 폴백: {}", e.getMessage());
+            }
+        }
+        synchronized (fallback) {
+            fallback.put(key, new Entry(value, Instant.now().plus(RETENTION)));
+        }
+    }
+
+    /** 사용자별로 나눈다 — 남이 같은 키를 보내도 내 작업이 돌아가지 않는다. */
+    private static String requestKey(Long userId, String label, String requestId) {
+        return REQUEST_KEY_PREFIX + label + ":" + userId + ":" + requestId;
+    }
+
     /*
      * 실패 로그에 jobId·userId·소요 시간을 함께 남긴다 — 앱이 2분에 기다리기를 그만두는데, 서버에서
      * 작업이 얼마나 걸렸는지를 로그로 볼 수 없어 "앱이 먼저 포기했는가"를 가를 수 없었다.
