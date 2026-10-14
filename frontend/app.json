@@ -2,7 +2,7 @@
   "expo": {
     "name": "Dubly",
     "slug": "doubly",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "runtimeVersion": {
       "policy": "fingerprint"
     },
@@ -109,12 +109,28 @@
             "enableMinifyInReleaseBuilds": true
           }
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "delayAppMeasurementInit": true
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "광고를 내 관심사에 맞게 보여 드리는 데 쓰여요. 허용하지 않아도 앱은 그대로 쓸 수 있고, 관련 없는 광고가 나와요."
+        }
       ]
     ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.doubly.app.ios",
-      "associatedDomains": ["applinks:dubly.co.kr"],
+      "associatedDomains": [
+        "applinks:dubly.co.kr"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "ko"
@@ -135,8 +151,17 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "data": [{ "scheme": "https", "host": "dubly.co.kr", "pathPrefix": "/i/" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "https",
+              "host": "dubly.co.kr",
+              "pathPrefix": "/i/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [

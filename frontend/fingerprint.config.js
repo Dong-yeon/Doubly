@@ -19,27 +19,14 @@
  * 나와야 한다. 자세한 경위는 docs/EAS_BUILD.md 8-5.
  */
 /*
- * iOS 동작(Motion) 권한 문구는 해시에서 1.0.7 빌드 때의 값(false)으로 되돌려 센다 — 2026-10-06.
- *
- * 1.0.7 은 motionUsagePermission: false 로 Android(vc39)가 먼저 출시됐는데, iOS 업로드가 ITMS-90683
- * (expo-location 이 동작 API 를 참조하므로 문구 필수)으로 거절됐다. 문구를 넣으면 expoConfig 해시가 바뀌어
- * <b>이미 나간 Android 1.0.7 에 OTA 가 끊긴다</b>(Android 해시도 expoConfig 전체를 본다). 이 문구는 iOS
- * Info.plist 텍스트일 뿐 JS 와 네이티브 코드의 호환성과 무관하므로 해시에서만 옛 값으로 센다.
- * 이 문구를 바꿔도 런타임 버전은 안 바뀐다 — 바꾸면 iOS 빌드를 새로 해야 반영된다.
- * 다음 네이티브 빌드 때 이 훅을 지워도 된다(docs/EAS_BUILD.md '다음 빌드에 묶을 것').
+ * 1.0.7 에 있던 fileHookTransform(iOS 동작 권한 문구를 해시에서 옛 값으로 세던 훅)은 1.0.8 빌드에서 지웠다 —
+ * 이 빌드는 광고 SDK 로 어차피 런타임이 바뀐다(docs/EAS_BUILD.md '다음 빌드에 묶을 것', 2026-10-06 경위).
  */
-const MOTION_TEXT_IN_HASH = /"motionUsagePermission":"[^"]*"/;
 
 /** @type {import('@expo/fingerprint').Config} */
 const config = {
   sourceSkips: ['PackageJsonAndroidAndIosScriptsIfNotContainRun', 'ExpoConfigExtraSection'],
   ignorePaths: ['android/**/*', 'ios/**/*'],
-  fileHookTransform: (source, chunk) => {
-    if (source.type === 'contents' && source.id === 'expoConfig' && typeof chunk === 'string') {
-      return chunk.replace(MOTION_TEXT_IN_HASH, '"motionUsagePermission":false');
-    }
-    return chunk;
-  },
 };
 
 module.exports = config;
