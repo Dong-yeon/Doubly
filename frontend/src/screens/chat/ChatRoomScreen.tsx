@@ -50,9 +50,11 @@ import { useAuthStore } from '../../store/authStore';
 import { useRelationStore } from '../../store/relationStore';
 import { haptics } from '../../utils/haptics';
 import { pickImages, releaseObjectUrl, shrinkUnknownImage, uploadImage } from '../../utils/imageUpload';
-import { cardImageUrl, thumbnailUrl } from '../../utils/imageUrl';
+import { cardImageUrl } from '../../utils/imageUrl';
+import { ChatPhoto } from '../../components/chat/ChatPhoto';
 import { isCoarsePointer } from '../../utils/pointer';
 import { useImageDrop } from '../../hooks/useImageDrop';
+import { usePhotoCrop } from '../../hooks/usePhotoCrop';
 import { uploadChatVoice } from '../../utils/chatVoiceUpload';
 import { parseVoiceContent } from '../../utils/chatVoice';
 import { getErrorMessage, isPlanGateError } from '../../utils/error';
@@ -331,6 +333,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * 예전엔 {@code string | null} 이라 "여러 장"이 들어올 자리가 아예 없었다.
    */
   const [pendingImages, setPendingImages] = useState<string[]>([]);
+  /** 미리보기에서 크게 보는 사진 — 아래 썸네일을 누르면 바뀐다(자르기 대상) */
+  const [previewIndex, setPreviewIndex] = useState(0);
   // 입력바 보조 도구는 기본으로 숨겨져 있다가 "+"로 펼친다 — 스티커 패널과는
   // 자리를 공유해서 항상 둘 중 하나만 뜬다(토글 핸들러들이 서로를 닫아준다).
   const [showStickers, setShowStickers] = useState(false);
@@ -1708,6 +1712,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     try {
       const uris = await pickImages(MAX_CHAT_IMAGES);
       if (uris.length === 0) return;
+      setPreviewIndex(0);
       setPendingImages(uris);
     } catch (e) {
       toast.error(getErrorMessage(e, '사진을 불러오지 못했어요.'));
@@ -1738,8 +1743,52 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   }, []);
   const dragging = useImageDrop(onDroppedImage);
 
+  /*
+   * 보내기 전 자르기(docs/chat-photo-crop_2026-10-14.md) — 미리보기에서 크게 보이는 사진을 자른다. 잘린 사진은 새 로컬
+   * 파일이고, "원래대로"를 위해 원본을 보낼 때까지 들고 있는다(잘린 uri → 처음 고른 uri). 다시 자르면 중간 결과는
+   * 버리고 처음 원본을 그대로 기억한다. 업로드는 보낼 때 한 번이라 몇 번을 잘라도 한도가 줄지 않는다.
+   */
+  const [cropOrigins, setCropOrigins] = useState<Record<string, string>>({});
+  /** 미리보기 목록에서 사진을 뺄 때 — 잘린 사진이면 기억해 둔 원본도 함께 놓는다(웹 blob. 두 번 놓아도 무해) */
+  const releasePending = useCallback((uri: string) => {
+    releaseObjectUrl(uri);
+    setCropOrigins((prev) => {
+      if (!(uri in prev)) return prev;
+      releaseObjectUrl(prev[uri]);
+      const next = { ...prev };
+      delete next[uri];
+      return next;
+    });
+  }, []);
+  const photoCrop = usePhotoCrop((index, image, previousUri) => {
+    if (pendingImages[index] !== previousUri) return;
+    const origin = cropOrigins[previousUri] ?? previousUri;
+    // 다시 자른 거면 중간 결과는 버린다 — 기억하는 건 처음 고른 원본 하나
+    if (previousUri in cropOrigins) releaseObjectUrl(previousUri);
+    setCropOrigins((prev) => {
+      const next = { ...prev, [image.uri]: origin };
+      delete next[previousUri];
+      return next;
+    });
+    setPendingImages((prev) => prev.map((u, i) => (i === index && u === previousUri ? image.uri : u)));
+  });
+  const onRestorePending = (index: number) => {
+    const uri = pendingImages[index];
+    const origin = uri ? cropOrigins[uri] : undefined;
+    if (!uri || !origin) return;
+    releaseObjectUrl(uri);
+    setCropOrigins((prev) => {
+      const next = { ...prev };
+      delete next[uri];
+      return next;
+    });
+    setPendingImages((prev) => prev.map((u, i) => (i === index && u === uri ? origin : u)));
+  };
+  /** 크게 보이는 사진 — 목록이 줄었으면(일부만 보내고 실패) 끝으로 당긴다 */
+  const previewAt = Math.min(previewIndex, Math.max(0, pendingImages.length - 1));
+
   const onCancelSendImage = () => {
-    pendingImages.forEach(releaseObjectUrl);
+    pendingImages.forEach(releasePending);
     setPendingImages([]);
   };
 
@@ -1820,12 +1869,12 @@ export function ChatRoomScreen({ navigation, route }: Props) {
     } finally {
       setUploading(false);
       // 보낸 것만 놓아준다. 못 보낸 것은 미리보기로 되돌린다 — 그사이 떨군 사진이 있으면 그 앞에 둔다 (#32)
-      uris.slice(0, sent).forEach(releaseObjectUrl);
+      uris.slice(0, sent).forEach(releasePending);
       const unsent = uris.slice(sent);
       if (unsent.length > 0) {
         setPendingImages((prev) => {
           const merged = [...unsent, ...prev];
-          merged.slice(MAX_CHAT_IMAGES).forEach(releaseObjectUrl);
+          merged.slice(MAX_CHAT_IMAGES).forEach(releasePending);
           return merged.slice(0, MAX_CHAT_IMAGES);
         });
       }
@@ -2152,7 +2201,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               accessibilityLabel="캐치마인드 열기"
               style={({ pressed }) => (pressed ? styles.imagePressed : undefined)}
             >
-              <Image source={{ uri: thumbnailUrl(item.imageUrl!, 200) }} style={chatStyles.msgImage} resizeMode="cover" />
+              <ChatPhoto uri={item.imageUrl!} style={chatStyles.msgImage} />
               {/*
                 캡션이 그대로 안내가 된다("…시작해보세요") — 새 배지나 색을 들이지 않는다.
                 말풍선 배경 위 글자색은 20개 팔레트 전부 검증된 chat.meta 뿐이다
@@ -2175,7 +2224,7 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               accessibilityRole="imagebutton"
               accessibilityLabel="사진 크게 보기"
             >
-              <Image source={{ uri: thumbnailUrl(item.imageUrl!, 200) }} style={chatStyles.msgImage} resizeMode="cover" />
+              <ChatPhoto uri={item.imageUrl!} style={chatStyles.msgImage} />
             </Pressable>
             {/*
               * 캡션 — 사용자가 보내는 사진에는 본문이 없고(ChatService.send), 지금은 캐치마인드
@@ -2942,12 +2991,40 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             한 장이면 크게 한 장, 여러 장이면 첫 장을 크게 보여주고 나머지는 아래 줄에 깐다.
             "무엇이 나가는지" 는 첫 장으로 대부분 판별되고, 장수는 보내기 버튼이 말한다.
           */}
-          {pendingImages[0] ? (
+          {pendingImages[previewAt] ? (
             <Image
-              source={{ uri: pendingImages[0] }}
+              source={{ uri: pendingImages[previewAt] }}
               style={styles.imagePreviewImage}
               resizeMode="contain"
             />
+          ) : null}
+          {/*
+            자르기 — 크게 보이는 사진에만. 스크린샷의 상태바·필요 없는 위아래를 잘라내는 게 주 용도다
+            (docs/chat-photo-crop_2026-10-14.md). 잘랐으면 "원래대로"가 함께 뜬다.
+          */}
+          {pendingImages[previewAt] ? (
+            <View style={styles.imagePreviewTools}>
+              <Pressable
+                onPress={() => void photoCrop.open(previewAt, pendingImages[previewAt])}
+                style={styles.imagePreviewTool}
+                accessibilityRole="button"
+                accessibilityLabel="이 사진 자르기"
+              >
+                <MaterialCommunityIcons name="resize" size={18} color={colors.white} />
+                <Text style={styles.imagePreviewToolText}>자르기</Text>
+              </Pressable>
+              {pendingImages[previewAt] in cropOrigins ? (
+                <Pressable
+                  onPress={() => onRestorePending(previewAt)}
+                  style={styles.imagePreviewTool}
+                  accessibilityRole="button"
+                  accessibilityLabel="자르기 전으로 되돌리기"
+                >
+                  <MaterialCommunityIcons name="restore" size={18} color={colors.white} />
+                  <Text style={styles.imagePreviewToolText}>원래대로</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
           {pendingImages.length > 1 ? (
             <ScrollView
@@ -2956,13 +3033,26 @@ export function ChatRoomScreen({ navigation, route }: Props) {
               style={styles.imagePreviewStrip}
               contentContainerStyle={styles.imagePreviewStripRow}
             >
+              {/* 누르면 그 사진이 위에 크게 뜬다 — 자를 사진을 고르는 자리 */}
               {pendingImages.map((uri, i) => (
-                <Image
+                <Pressable
                   key={`${uri}-${i}`}
-                  source={{ uri }}
-                  style={[styles.imagePreviewThumb, i === 0 && styles.imagePreviewThumbActive]}
-                  resizeMode="cover"
-                />
+                  onPress={() => setPreviewIndex(i)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: i === previewAt }}
+                  accessibilityLabel={`${i + 1}번째 사진 보기`}
+                >
+                  <Image
+                    source={{ uri }}
+                    style={[styles.imagePreviewThumb, i === previewAt && styles.imagePreviewThumbActive]}
+                    resizeMode="cover"
+                  />
+                  {uri in cropOrigins ? (
+                    <View style={styles.imagePreviewThumbBadge} pointerEvents="none">
+                      <MaterialCommunityIcons name="resize" size={10} color={colors.white} />
+                    </View>
+                  ) : null}
+                </Pressable>
               ))}
             </ScrollView>
           ) : null}
@@ -2980,6 +3070,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             />
           </View>
         </View>
+        {/* 자르기 시트는 미리보기 Modal 안에 둔다 — 밖에 두면 iOS 에서 이 Modal 뒤에 뜬다 */}
+        {photoCrop.sheet}
       </Modal>
 
       {/* 리액션 선택 — 길게 누른 메시지에 이모지를 붙인다 */}
@@ -3170,6 +3262,30 @@ const styles = themedStyles((colors) => ({
   imagePreviewThumb: { width: 56, height: 56, borderRadius: radius.sm, opacity: 0.6 },
   /* 위에 크게 떠 있는 것이 어느 장인지 표시한다 */
   imagePreviewThumbActive: { opacity: 1, borderWidth: 2, borderColor: colors.white },
+  // 잘린 사진 표시 — 썸네일 왼쪽 아래 작은 가위
+  imagePreviewThumbBadge: {
+    position: 'absolute',
+    left: 3,
+    bottom: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // 자르기·원래대로 — 어두운 막 위라 테마와 무관하게 흰 글자 + 반투명 알약
+  imagePreviewTools: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  imagePreviewTool: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  imagePreviewToolText: { color: colors.white, fontSize: fontSize.body, fontWeight: '700' },
   imagePreviewActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg, width: '100%' },
   imagePreviewBtn: { flex: 1 },
   // 추천 막대를 목록 바닥에 겹쳐 띄우는 자리(렌더 주석). 비어 있으면 높이 0 이다

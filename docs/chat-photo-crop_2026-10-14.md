@@ -69,3 +69,24 @@ iOS 는 정사각 고정, 안드로이드는 기기마다 다른 화면, 웹은 
 2. 말풍선 비율(§4 끝)을 같이 할지.
 3. 회전까지 넣을지(권장: 1차는 자르기만, `ImageManipulator.rotate` 로 나중에 쉽게 붙는다).
 4. R2 썸네일(§1-2)은 별개 작업으로 뺄지.
+
+## 7. 결정과 구현 (2026-10-14)
+
+결정: ① 채팅 + 일상 남기기 둘 다 ② 말풍선 비율 같이 ③ 1차는 자르기만(회전 없음) ④ R2 썸네일도 같이.
+
+- `components/PhotoCropSheet.tsx` — 사진은 고정, 틀의 모서리·변을 끄는 자유 자르기. 비율 칩 자유·1:1·4:5·원본, 처음으로.
+  틀을 안 건드리고 완료하면 원본 그대로(재인코딩 없음). 업로드하지 않는다. 계산은 `utils/photoCrop.ts`.
+- `hooks/usePhotoCrop.tsx` — 목록 속 한 장을 재서 시트에 넘기고 결과로 바꾸는 공용 흐름.
+- 채팅 미리보기: 아래 썸네일을 누르면 그 사진이 크게 뜨고, [자르기]·[원래대로](잘랐을 때만). 잘린 썸네일엔 작은 표시.
+  원본은 보낼 때까지 들고 있다가 함께 놓는다(웹 blob). 시트는 미리보기 Modal **안에** 렌더한다(iOS 겹침).
+- 일상 남기기: 아직 안 올린 사진 썸네일을 누르면 자르기. 고치기에서 그대로 둔 서버 사진은 자르지 않는다(받아서 다시 올리면 한도 소모).
+- 말풍선: `components/chat/ChatPhoto.tsx` + `utils/chatPhotoSize.ts` — 최대 220×280 상자에 비율대로, 최소 한 변 110.
+  비율은 로드 때 알고 주소별로 기억한다(처음 한 번은 정사각 → 실제 비율로 바뀐다). 받는 주소는 폭만 줄인 사본(`cardImageUrl`).
+- R2 썸네일: `utils/imageUrl.ts` 에 Cloudflare 이미지 변환 주소(`/cdn-cgi/image/…,onerror=redirect/…`)를 붙였지만
+  **스위치 `R2_IMAGE_RESIZE` 는 꺼 둔 채다.** 2026-10-14 에 `media.dubly.co.kr/cdn-cgi/image/...` 가 404 — 영역에서 변환이
+  꺼져 있다. Cloudflare 대시보드 › dubly.co.kr › Images › Transformations 를 켠 뒤 실제 R2 주소로 200·image 응답을
+  확인하고 스위치를 켠다(무료 플랜 월 5,000 고유 변환, 넘치면 onerror=redirect 로 원본).
+- 아이콘은 새 글리프를 쓰지 않았다(`resize`·`restore` 기존 글리프) — 이 PC 엔 fontTools 가 없어 서브셋 폰트를 다시 못 만들고,
+  글리프맵만 늘면 빈 네모가 된다.
+- 검증: `node --experimental-strip-types scripts/verify-photo-crop.mjs`(이상 사용 포함 30여 건), typecheck, 웹 export,
+  verify:nested-buttons(새 중첩 없음). **실기기 미확인** — 제스처 감도·EXIF 회전 사진·iOS Modal 겹침은 폰에서 봐야 한다.
