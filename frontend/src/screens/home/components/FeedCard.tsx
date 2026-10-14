@@ -18,8 +18,9 @@
  * 자동 기록은 버튼 하나로 접는다({@link RecordCard} 주석 참고) — 작은 카드에 칩 다섯 개를
  * 늘어놓으면 응원이 기록보다 커진다.
  */
-import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ImageViewer } from '../../../components/ImageViewer';
 import { MaterialCommunityIcons } from '../../../components/Icon';
 import type { FeedItem, FeedItemType, ReactionSummary } from '../../../types';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
@@ -243,33 +244,76 @@ function ReactionTrigger({
  * 여러 장 사진 — 좌우 스와이프로 넘기고 아래에 현재 위치를 점으로 보여준다.
  * 한 장뿐이면 기존처럼 단순 Image 하나만(스크롤뷰·점 오버헤드가 없다).
  */
-function PostPhotos({ uris }: { uris: string[] }) {
+function PostPhotos({ uris, onLongPress }: { uris: string[]; onLongPress: () => void }) {
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
+  /** 크게 보기 — 누른 사진부터. null 이면 닫힘 */
+  const [viewing, setViewing] = useState<number | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  /*
+   * 누르면 크게 — 예전엔 카드 안 가로 넘김뿐이라, 넘김이 안 되는 자리(PC 웹은 마우스로 끌 수 없다)에서는 첫 장 말고는
+   * 볼 길이 없었고 확대도 안 됐다("일상 사진을 넘겨 볼 수 없다" 문의, 2026-10-14). 뷰어는 좌우 넘김·확대·저장을 다 한다.
+   * 카드 길게 누르기(고치기·삭제)는 사진이 터치를 가져가므로 여기서 넘겨준다.
+   */
+  const photo = (uri: string, i: number) => (
+    <Pressable
+      key={i}
+      onPress={() => setViewing(i)}
+      onLongPress={onLongPress}
+      delayLongPress={400}
+      accessibilityRole="imagebutton"
+      accessibilityLabel={uris.length > 1 ? `사진 ${i + 1}/${uris.length} 크게 보기` : '사진 크게 보기'}
+    >
+      <Image source={{ uri }} style={[styles.photo, width > 0 ? { width } : null]} resizeMode="cover" />
+    </Pressable>
+  );
+
+  const goTo = (i: number) => {
+    if (width <= 0) return;
+    scrollRef.current?.scrollTo({ x: i * width, animated: true });
+    setIndex(i);
+  };
+
+  const viewer = viewing !== null ? (
+    <ImageViewer
+      images={uris.map((uri, i) => ({ key: `${i}-${uri}`, uri }))}
+      initialIndex={viewing}
+      onClose={() => setViewing(null)}
+    />
+  ) : null;
 
   if (uris.length <= 1) {
-    return <Image source={{ uri: uris[0] }} style={styles.photo} resizeMode="cover" />;
+    return (
+      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {photo(uris[0], 0)}
+        {viewer}
+      </View>
+    );
   }
 
   return (
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <ScrollView
+        ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(e) => {
           if (width > 0) setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
         }}
+        // 웹은 momentum 이벤트가 없다 — 트랙패드·화살표로 넘겨도 점이 따라오게
+        onScroll={Platform.OS === 'web' ? (e) => {
+          if (width > 0) setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+        } : undefined}
+        scrollEventThrottle={Platform.OS === 'web' ? 100 : undefined}
       >
-        {uris.map((uri, i) => (
-          <Image
-            key={i}
-            source={{ uri }}
-            style={[styles.photo, width > 0 ? { width } : null]}
-            resizeMode="cover"
-          />
-        ))}
+        {uris.map(photo)}
       </ScrollView>
+      {/* 몇 장 중 몇 번째 — 점만으로는 "더 있다"가 잘 안 보인다 */}
+      <View style={styles.photoCount} pointerEvents="none">
+        <Text style={styles.photoCountText}>{index + 1}/{uris.length}</Text>
+      </View>
       {width > 0 ? (
         <View style={styles.dotsRow} pointerEvents="none">
           {uris.map((_, i) => (
@@ -277,6 +321,20 @@ function PostPhotos({ uris }: { uris: string[] }) {
           ))}
         </View>
       ) : null}
+      {/* 웹(PC)은 마우스로 끌어 넘길 수 없다 — 이전·다음 버튼 */}
+      {Platform.OS === 'web' && index > 0 ? (
+        <Pressable style={[styles.photoNav, styles.photoNavPrev]} onPress={() => goTo(index - 1)}
+          accessibilityRole="button" accessibilityLabel="이전 사진">
+          <MaterialCommunityIcons name="chevron-left" size={24} color={colors.white} />
+        </Pressable>
+      ) : null}
+      {Platform.OS === 'web' && index < uris.length - 1 ? (
+        <Pressable style={[styles.photoNav, styles.photoNavNext]} onPress={() => goTo(index + 1)}
+          accessibilityRole="button" accessibilityLabel="다음 사진">
+          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.white} />
+        </Pressable>
+      ) : null}
+      {viewer}
     </View>
   );
 }
@@ -295,7 +353,7 @@ function PostCard({ item, timeLabel, quickEmojis, onReact, onLongPress, onOpenCo
       onLongPress={() => onLongPress(item)}
       delayLongPress={400}
     >
-      {hasPhoto ? <PostPhotos uris={photos} /> : null}
+      {hasPhoto ? <PostPhotos uris={photos} onLongPress={() => onLongPress(item)} /> : null}
 
       <View style={[styles.postBody, hasPhoto && styles.postBodyOnPhoto]}>
         <View style={styles.postHeader}>
@@ -462,6 +520,30 @@ const styles = themedStyles((colors) => ({
     gap: 5,
   },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
+  // 몇 장 중 몇 번째 — 사진 위라 테마와 무관하게 어두운 알약에 흰 글자
+  photoCount: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  photoCountText: { color: colors.white, fontSize: fontSize.caption, fontWeight: '700' },
+  photoNav: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  photoNavPrev: { left: spacing.sm },
+  photoNavNext: { right: spacing.sm },
   dotActive: { backgroundColor: colors.white },
   postBody: {},
   postBodyOnPhoto: { padding: spacing.md },
