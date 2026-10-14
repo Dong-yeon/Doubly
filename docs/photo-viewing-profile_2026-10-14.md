@@ -72,3 +72,12 @@ D 는 B 와 겹치므로 1차에선 뺀다. E 는 같이 해도 부담이 없다
 - `AvatarCropSheet` 결과 기본 1024px(예전 512) — `outputSize` 속성으로 바꿀 수 있고, **우리 이모지 얼굴 맞추기는 512 유지**(AI 입력이 커지면 비용만 는다).
   이미 올린 프로필 사진은 그대로 512다 — 다시 올리면 1024.
 - 검증: typecheck·웹 export·nested-buttons(새 중첩 없음)·린트(새 오류 없음). 실기기 미확인.
+
+## 5. OTA (2026-10-14)
+
+- production OTA 게시 — 그룹 Android `bcc3bdc8-4a32-4c31-b6ff-eee4e9bb7434` / iOS `8dec8848-4f30-41df-af17-82cede44bc8e`, 런타임 = 1.0.7(Android 700b96c0 / iOS d75619b0, fingerprint 일치 확인).
+- **소스는 main 이 아니다** — `ota/2026-10-13-loveufour` 위에 이 날의 앱 커밋 넷(일상 카드·자르기·사진 넘기기·프로필 시트) + R2 스위치를 얹은
+  `5f3754e8`(태그 `ota/2026-10-14-photo-profile`). main 의 재화 P1(OTA 보류)은 여전히 빠져 있고, **다음에 main 그대로 OTA 하면 같이 나간다.**
+- R2 썸네일: 사용자가 Cloudflare Transformations 를 켬(This zone only). `media.dubly.co.kr/cdn-cgi/image/...` 경로 형식에서 `cf-resized` 응답과
+  실패 시 `onerror=redirect` 원본 리다이렉트를 확인하고 `R2_IMAGE_RESIZE = true`. 무료 월 5,000 고유 변환.
+- 실기기 미확인.
