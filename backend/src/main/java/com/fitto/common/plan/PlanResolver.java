@@ -158,6 +158,16 @@ public class PlanResolver {
                 .map(Relation::getId);
     }
 
+    /** 이 사람과 활성 커플 상대 — 커플이 없으면 본인만. 광고 제거 판정({@link AdFreeResolver})이 쓴다. */
+    @Transactional(readOnly = true)
+    public List<Long> coupleMemberIdsOf(Long userId) {
+        List<Long> ids = activeCoupleIdOf(userId).map(this::memberIdsOf).orElseGet(ArrayList::new);
+        if (!ids.contains(userId)) {
+            ids.add(userId);
+        }
+        return ids;
+    }
+
     private List<Long> memberIdsOf(Long relationId) {
         Set<Long> ids = new LinkedHashSet<>();
         relationRepository.findById(relationId).ifPresent(relation -> {

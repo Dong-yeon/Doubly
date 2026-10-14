@@ -76,6 +76,13 @@ S1·S2 는 서버만 바꾸므로 코드는 S4 빌드보다 먼저 나가도 된
 
 ## 4. S2 — 광고 제거 판정 + 영구권 (서버, V142)
 
+> **구현 완료(2026-10-14).** 아래 계획과 다른 점: 엔티티 이름은 `UserEntitlement`(종류 enum `Kind.AD_FREE`), 상품 enum 은
+> `LifetimeProduct`, 상태는 `revoked_at` 대신 `status`(GRANTED/REVOKED — 크라운 `currency_store_purchases` 와 같은 모양),
+> 환불은 조건부 UPDATE(행 잠금 없음). 상대 알림은 새 이벤트 `CoupleEvent.PLAN` 을 `PlanChangeNotifier` 가 보낸다 —
+> 영구권 구매·환불, **구독 검증 API** 직후(웹훅으로만 오는 갱신·만료는 보내지 않는다 — 상대는 다음 `/plan/me` 에서 따라온다).
+> `/plan/me` 에 `adFree`·`adFreeSource`·`lifetimeOwned`. 앱 동기화 테스트(`PLUS_LIFETIME_PRODUCT_ID`)는 앱 상수를 넣는 S4 로 미뤘다.
+> 테스트 `AdFreeLifetimeFlowTest` 9건(스토어 클라이언트만 가짜, 서비스 직접 조립 — 새 컨텍스트 없음), 전체 1457건 통과(H2).
+
 ### 4-1. 스키마 — `V142__user_entitlements.sql`
 
 ```sql

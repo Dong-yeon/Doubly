@@ -37,17 +37,20 @@ public class GooglePlayWebhookController {
     private final GooglePlaySubscriptionSyncService syncService;
     private final FeatureCreditService creditService;
     private final com.fitto.common.currency.CurrencyPurchaseService currencyPurchaseService;
+    private final EntitlementPurchaseService entitlementService;
     private final ObjectMapper objectMapper;
 
     public GooglePlayWebhookController(GooglePlayProperties properties,
                                         GooglePlaySubscriptionSyncService syncService,
                                         FeatureCreditService creditService,
                                         com.fitto.common.currency.CurrencyPurchaseService currencyPurchaseService,
+                                        EntitlementPurchaseService entitlementService,
                                         ObjectMapper objectMapper) {
         this.properties = properties;
         this.syncService = syncService;
         this.creditService = creditService;
         this.currencyPurchaseService = currencyPurchaseService;
+        this.entitlementService = entitlementService;
         this.objectMapper = objectMapper;
     }
 
@@ -70,9 +73,10 @@ public class GooglePlayWebhookController {
                 && notification.voidedPurchaseNotification().purchaseToken() != null) {
             var voided = notification.voidedPurchaseNotification();
             if (voided.productType() == 2) {
-                // 일회성 상품은 둘 중 하나다 — 각 서비스가 "우리가 준 거래인가"를 자기 표에서 먼저 보고 아니면 지나간다
+                // 일회성 상품은 셋 중 하나다(세트·크라운·영구권) — 각 서비스가 "우리가 준 거래인가"를 자기 표에서 먼저 보고 아니면 지나간다
                 creditService.revokeIfVoidedOnGooglePlay(voided.purchaseToken());
                 currencyPurchaseService.revokeIfVoidedOnGooglePlay(voided.purchaseToken());
+                entitlementService.revokeIfVoidedOnGooglePlay(voided.purchaseToken());
             } else {
                 syncService.sync(voided.purchaseToken());
             }

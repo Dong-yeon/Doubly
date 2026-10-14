@@ -36,17 +36,20 @@ public class AppStoreNotificationController {
     private final AppStoreSubscriptionSyncService syncService;
     private final FeatureCreditService creditService;
     private final com.fitto.common.currency.CurrencyPurchaseService currencyPurchaseService;
+    private final EntitlementPurchaseService entitlementService;
     private final ObjectMapper objectMapper;
 
     public AppStoreNotificationController(AppStoreProperties properties,
                                            AppStoreSubscriptionSyncService syncService,
                                            FeatureCreditService creditService,
                                            com.fitto.common.currency.CurrencyPurchaseService currencyPurchaseService,
+                                           EntitlementPurchaseService entitlementService,
                                            ObjectMapper objectMapper) {
         this.properties = properties;
         this.syncService = syncService;
         this.creditService = creditService;
         this.currencyPurchaseService = currencyPurchaseService;
+        this.entitlementService = entitlementService;
         this.objectMapper = objectMapper;
     }
 
@@ -91,6 +94,14 @@ public class AppStoreNotificationController {
             String transactionId = transaction.path("transactionId").asText(null);
             if (transactionId != null) {
                 currencyPurchaseService.revokeIfRefundedOnAppStore(transactionId);
+            }
+            return ResponseEntity.ok().build();
+        }
+        // 영구권(비소모성)의 환불 — 같은 갈래. 구독 경로로 보내면 구독 조회가 404 로 끝나 아무 일도 없다
+        if (productId != null && LifetimeProduct.byProductId(productId).isPresent()) {
+            String transactionId = transaction.path("transactionId").asText(null);
+            if (transactionId != null) {
+                entitlementService.revokeIfRefundedOnAppStore(transactionId);
             }
             return ResponseEntity.ok().build();
         }

@@ -34,4 +34,6 @@ public record CoupleEvent(String type) {
     public static final String GAME = "GAME";
     /** 럽슐랭 장소가 새로 생겼다(채팅 링크 칩·장소 추가 등) — 수신측은 럽슐랭 목록 캐시를 비우고 GET /api/v1/places 로 다시 받는다 */
     public static final String PLACE = "PLACE";
+    /** 결제로 광고 제거·플랜이 바뀌었다(구독 결제·영구권 구매·환불) — 수신측은 GET /api/v1/plan/me 를 다시 받는다(상대가 사면 나도 광고가 꺼진다) */
+    public static final String PLAN = "PLAN";
 }

@@ -31,14 +31,21 @@ public class PlanController {
     private final GooglePlaySubscriptionSyncService googlePlaySyncService;
     private final AppStoreSubscriptionSyncService appStoreSyncService;
     private final FeatureCreditService creditService;
+    private final EntitlementPurchaseService entitlementService;
+    private final AdFreeResolver adFreeResolver;
+    private final PlanChangeNotifier planChangeNotifier;
 
     public PlanController(PlanGuard planGuard, GooglePlaySubscriptionSyncService googlePlaySyncService,
                           AppStoreSubscriptionSyncService appStoreSyncService,
-                          FeatureCreditService creditService) {
+                          FeatureCreditService creditService, EntitlementPurchaseService entitlementService,
+                          AdFreeResolver adFreeResolver, PlanChangeNotifier planChangeNotifier) {
         this.planGuard = planGuard;
         this.googlePlaySyncService = googlePlaySyncService;
         this.appStoreSyncService = appStoreSyncService;
         this.creditService = creditService;
+        this.entitlementService = entitlementService;
+        this.adFreeResolver = adFreeResolver;
+        this.planChangeNotifier = planChangeNotifier;
     }
 
     @GetMapping("/me")
@@ -88,6 +95,7 @@ public class PlanController {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         googlePlaySyncService.sync(request.purchaseToken());
+        planChangeNotifier.notifyCouple(user.id());   // 상대 화면의 광고도 바로 내린다
         return ApiResponse.success(currentPlanOf(user));
     }
 
@@ -106,6 +114,27 @@ public class PlanController {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         appStoreSyncService.sync(request.transactionId());
+        planChangeNotifier.notifyCouple(user.id());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    /**
+     * 영구 상품(Dubly Plus 영구, 비소모성) 결제 직후·<b>구매 복원</b> 때 앱이 부른다 — 크레딧 검증과 같은 요청 모양.
+     * 이미 반영된 거래면 그대로 성공한다(복원은 같은 호출을 다시 하는 것). 실패는 예외로 알린다.
+     */
+    @PostMapping("/entitlements/purchases/google")
+    public ApiResponse<PlanResponse> verifyGoogleLifetime(@AuthenticationPrincipal AuthUser user,
+                                                           @RequestBody CreditPurchaseVerifyRequest request) {
+        requireReceipt(request);
+        entitlementService.verifyGoogle(user.id(), request.productId(), request.receipt());
+        return ApiResponse.success(currentPlanOf(user));
+    }
+
+    @PostMapping("/entitlements/purchases/apple")
+    public ApiResponse<PlanResponse> verifyAppleLifetime(@AuthenticationPrincipal AuthUser user,
+                                                          @RequestBody CreditPurchaseVerifyRequest request) {
+        requireReceipt(request);
+        entitlementService.verifyApple(user.id(), request.productId(), request.receipt());
         return ApiResponse.success(currentPlanOf(user));
     }
 
@@ -141,8 +170,10 @@ public class PlanController {
                 .filter(feature -> feature != Feature.AI_TOTAL)   // 내부 안전망 — 표시하지 않는다
                 .map(feature -> planGuard.state(user.id(), feature))
                 .toList();
+        AdFreeResolver.Source adFree = adFreeResolver.sourceOf(user.id());
         return new PlanResponse(planGuard.planOf(user.id()), planGuard.couplePlanOf(user.id()),
                 planGuard.isInTrial(user.id()),
-                planGuard.trialEndsAt(user.id()), features);
+                planGuard.trialEndsAt(user.id()), features,
+                adFree != AdFreeResolver.Source.NONE, adFree.name(), adFreeResolver.ownsLifetime(user.id()));
     }
 }

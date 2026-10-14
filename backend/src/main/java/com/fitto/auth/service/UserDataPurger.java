@@ -154,6 +154,9 @@ public class UserDataPurger {
         exec("delete from currency_ledger where user_id = :uid", userId);
         exec("delete from currency_store_purchases where user_id = :uid", userId);
         exec("delete from currency_wallets where user_id = :uid", userId);
+        // 영구권(V142) — users FK 라 빠뜨리면 탈퇴가 실패한다. 지우면 새 계정으로 복원되지 않는다(스토어 귀속 id 가 다르다) —
+        // 탈퇴 확인문이 알린다(docs/DUBLY_PLUS_PLAN_2026-10-14.md D9). 관계 삭제(RelationRecordPurger)는 거두지 않는다.
+        exec("delete from user_entitlements where user_id = :uid", userId);
         /*
          * AI 토큰 사용량(V89) — user_id 에 FK 가 없어서 탈퇴를 막지는 않지만, 그래서 오히려
          * 여기서 빠뜨리면 조용히 남는다. 탈퇴한 사람의 사용 이력을 들고 있을 이유가 없다
