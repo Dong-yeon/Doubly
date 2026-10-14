@@ -141,6 +141,9 @@ fitto:
     # 0 으로 둔다 — "가입하면 FREE 로 시작"이 지금의 방침이다. 체험을 주려면 숫자만
     # 올리면 되고(PLAN_TRIAL_DAYS=3), 기준 시각은 users.created_at 이라 소급 적용된다.
     trial-days: ${PLAN_TRIAL_DAYS:0}
+    # 한 등급(FREE 개방) — 켜면 모든 한도가 Feature 의 세 번째 값(open)이 된다. 광고 빌드(S4)가 나가는 날 켠다
+    # (docs/DUBLY_PLUS_PLAN_2026-10-14.md S1). 먼저 켜면 결제 중인 구독자가 받는 것이 0 이 된다.
+    single-tier: ${PLAN_SINGLE_TIER:false}
 
   # Google Play 구독 웹훅(RTDN) — 서비스 계정 키(base64) 미설정 시 기능 전체 비활성,
   # 웹훅 요청은 전부 403(GooglePlayProperties 참고). 패키지명·서비스 계정 키는 스토어

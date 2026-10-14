@@ -94,6 +94,10 @@ public enum ErrorCode {
     PLAN_UPGRADE_REQUIRED(HttpStatus.PAYMENT_REQUIRED, "PRO에서 이용할 수 있는 기능이에요."),
     PLAN_LIMIT_EXCEEDED(HttpStatus.PAYMENT_REQUIRED, "무료 플랜의 이용 한도를 모두 사용했어요."),
     USAGE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "이용 한도를 모두 사용했어요."),
+    /* 한 등급(PlanProperties.singleTier)에서 모두에게 막힌 기능 — 구독으로는 풀리지 않으므로 PLAN_* 와 코드를 나눈다.
+     * 앱의 전역 업그레이드 시트는 PLAN_UPGRADE_REQUIRED·PLAN_LIMIT_EXCEEDED 에만 반응한다(api/client.ts). */
+    FEATURE_PURCHASE_REQUIRED(HttpStatus.PAYMENT_REQUIRED, "우리 이모지는 크라운이나 산 세트로 만들 수 있어요."),
+    FEATURE_NOT_AVAILABLE(HttpStatus.FORBIDDEN, "지금은 이용할 수 없는 기능이에요."),
 
     // 식단 AI 분석 (DIET AI)
     AI_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "AI 분석 기능이 아직 준비되지 않았어요."),

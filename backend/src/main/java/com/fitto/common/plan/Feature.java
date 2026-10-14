@@ -33,25 +33,34 @@ public enum Feature {
      * 하루도 온전히 못 겪는다는 뜻이다. 끼니 수보다 여유 있게 5회를 준다 —
      * 원가는 flash-lite 라 여전히 무시할 수준이다.
      */
-    AI_FOOD_PHOTO("AI 음식 사진 분석", Quota.perDay(5), Quota.perDay(30)),
+    AI_FOOD_PHOTO("AI 음식 사진 분석", Quota.perDay(5), Quota.perDay(30),
+            Quota.perDay(10)),
     /** 음식 이름 텍스트 분석 — 사진보다 가벼워 한도도 같이 준다. */
-    AI_FOOD_TEXT("AI 음식 분석", Quota.perDay(2), Quota.perDay(30)),
-    AI_DIET_COACH("AI 식단 코치", Quota.blocked(), Quota.perDay(10)),
-    AI_DATE_COURSE("AI 데이트 코스 추천", Quota.perMonth(1), Quota.perDay(10)),
+    AI_FOOD_TEXT("AI 음식 분석", Quota.perDay(2), Quota.perDay(30),
+            Quota.perDay(10)),
+    AI_DIET_COACH("AI 식단 코치", Quota.blocked(), Quota.perDay(10),
+            Quota.perDay(3)),
+    AI_DATE_COURSE("AI 데이트 코스 추천", Quota.perMonth(1), Quota.perDay(10),
+            Quota.perDay(3)),
     /**
      * 럽슐랭 취향 기반 새 맛집 추천(Gemini 검색 의도 → 카카오 실존 장소) — 구 AI 총평의 대체.
      * 둘이 검증한 데이터가 쌓일수록 추천이 정교해진다 — 지불 의사와 같은 곡선이라 PRO 전용으로 판다.
      */
-    AI_RESTAURANT_RECOMMEND("AI 맛집 추천", Quota.blocked(), Quota.perDay(10)),
-    AI_WEEKLY_LETTER("AI 주간 편지", Quota.blocked(), Quota.perDay(5)),
-    AI_TRIP_ITINERARY("AI 여행 일정 생성", Quota.blocked(), Quota.perDay(5)),
-    AI_WORKOUT_RECOMMEND("AI 운동 추천", Quota.perWeek(1), Quota.perDay(10)),
+    AI_RESTAURANT_RECOMMEND("AI 맛집 추천", Quota.blocked(), Quota.perDay(10),
+            Quota.perDay(3)),
+    AI_WEEKLY_LETTER("AI 주간 편지", Quota.blocked(), Quota.perDay(5),
+            Quota.perDay(2)),
+    AI_TRIP_ITINERARY("AI 여행 일정 생성", Quota.blocked(), Quota.perDay(5),
+            Quota.perDay(3)),
+    AI_WORKOUT_RECOMMEND("AI 운동 추천", Quota.perWeek(1), Quota.perDay(10),
+            Quota.perDay(3)),
     /**
      * "오늘 뭐 먹지" 다음 끼니 제안(2026-08 진단 리포트 제안) — 반복되는 질문이라
      * AI_DATE_COURSE(월 1회)처럼 맛보기만 주면 반드시 부족해져 자연 업셀이 된다.
      * AI_DIET_COACH 처럼 개인 판정 — 커플 모드 제안은 화면에서 선택적으로 연다.
      */
-    AI_NEXT_MEAL("다음 끼니 AI 제안", Quota.perWeek(1), Quota.perDay(5)),
+    AI_NEXT_MEAL("다음 끼니 AI 제안", Quota.perWeek(1), Quota.perDay(5),
+            Quota.perDay(3)),
     /**
      * 우리 이모지 — 상대(또는 내) 사진 한 장으로 감정 6종 캐릭터 세트를 그린다. <b>세트 단위로 1회</b> 차감.
      *
@@ -80,7 +89,8 @@ public enum Feature {
      * 2면 생성 24장(+다시 그리기 6) — <b>장 수로는 예전 4 x 6 = 24 와 같다.</b> 23종이 두 세트(12 + 11)로 거의 다
      * 갖춰지므로 "한 달 안에 한 벌"도 그대로 성립한다.
      */
-    AI_COUPLE_EMOJI("우리 이모지 만들기", Quota.blocked(), Quota.perMonth(2)),
+    AI_COUPLE_EMOJI("우리 이모지 만들기", Quota.blocked(), Quota.perMonth(2),
+            Quota.blocked()),
 
     /**
      * 플랜과 무관한 <b>전 기능 합산 안전망</b>.
@@ -90,7 +100,8 @@ public enum Feature {
      * <b>전원이</b> AI 를 못 쓴다. 그래서 개인별 총량도 함께 막는다.
      * 값은 {@code fitto.gemini.daily-limit-per-user} 로 덮어쓴다.
      */
-    AI_TOTAL("AI 기능 전체", Quota.perDay(10), Quota.perDay(10)),
+    AI_TOTAL("AI 기능 전체", Quota.perDay(10), Quota.perDay(10),
+            Quota.perDay(10)),
 
     /* ── 저장 · 원가형 ────────────────────────────────────────────────────────
      * 여기는 진짜로 돈이 나간다. Cloudinary 무료 티어는 유예가 아니라 절벽이라,
@@ -113,54 +124,71 @@ public enum Feature {
      * 커플 단위로 두는 편이 원래 의도에 더 맞는다 — 요금 폭탄 방지는 계정 수와 무관하고,
      * 커플 월 1000장이면 실사용에서는 닿지 않는다.
      */
-    PHOTO_UPLOAD("사진 업로드", Quota.perMonth(60), Quota.perMonth(1000)),
+    PHOTO_UPLOAD("사진 업로드", Quota.perMonth(60), Quota.perMonth(1000),
+            Quota.perMonth(1000)),
 
     /* ── 저장 · 개수형 (DB 개수로 판정) ───────────────────────────────────── */
 
     /** 아직 끝나지 않은 여행 (지난 여행은 세지 않는다 — 지워야 새로 만들 수 있으면 안 된다) */
-    TRIP_ACTIVE("진행 중인 여행", Quota.upTo(1), Quota.unlimited()),
-    PLACE_PIN("맛집 핀", Quota.upTo(20), Quota.unlimited()),
+    TRIP_ACTIVE("진행 중인 여행", Quota.upTo(1), Quota.unlimited(),
+            Quota.unlimited()),
+    PLACE_PIN("맛집 핀", Quota.upTo(20), Quota.unlimited(),
+            Quota.unlimited()),
     /** 영화·공연·드라마 콘텐츠 — Place 와 별개 도메인이지만 상한 성격은 같다(PLACE_PIN 과 동일 패턴). */
-    CONTENT_ITEM("콘텐츠", Quota.upTo(20), Quota.unlimited()),
+    CONTENT_ITEM("콘텐츠", Quota.upTo(20), Quota.unlimited(),
+            Quota.unlimited()),
     /** PRO 의 30은 기존 {@code MAX_ROUTINES} 를 옮겨온 것 — 상한의 단일 출처를 여기로 모았다. */
-    WORKOUT_ROUTINE("내 운동 루틴", Quota.upTo(3), Quota.upTo(30)),
+    WORKOUT_ROUTINE("내 운동 루틴", Quota.upTo(3), Quota.upTo(30),
+            Quota.upTo(30)),
     /**
      * 다가오는 일정 수 — 매년 반복(기념일·생일)과 아직 끝나지 않은 일정만 센다.
      * 예전엔 월 10건 소비형이라 지워도 돌아오지 않았고, 첫날 기념일·생일·약속을 넣다 보면 그 달이 끝났다
      * (docs/first-experience-audit.md #33). 지난 일정은 세지 않는다 — 세면 기록이 쌓일수록 지워야만 새로 넣을 수 있다.
      */
-    CALENDAR_EVENT("다가오는 캘린더 일정", Quota.upTo(10), Quota.unlimited()),
+    CALENDAR_EVENT("다가오는 캘린더 일정", Quota.upTo(10), Quota.unlimited(),
+            Quota.unlimited()),
     /** PRO 의 50은 기존 {@code MAX_FAVORITES} 를 옮겨온 것. */
-    FAVORITE_FOOD("즐겨찾는 음식", Quota.upTo(10), Quota.upTo(50)),
+    FAVORITE_FOOD("즐겨찾는 음식", Quota.upTo(10), Quota.upTo(50),
+            Quota.upTo(50)),
     /**
      * 커스텀 운동 종목({@code exercise_catalog.created_by}, 아직 미사용 컬럼) — 개인 소유,
      * WORKOUT_ROUTINE 과 같은 개수형 패턴. 만든 종목은 루틴 선물 패턴으로 공유 가능(구현 시).
      */
-    CUSTOM_EXERCISE("커스텀 운동 종목", Quota.upTo(3), Quota.upTo(30)),
+    CUSTOM_EXERCISE("커스텀 운동 종목", Quota.upTo(3), Quota.upTo(30),
+            Quota.upTo(30)),
     /** 커플 대결 동시 진행 개수 — TRIP_ACTIVE 와 같은 패턴("동시에 몇 개"). */
-    CHALLENGE_ACTIVE("진행 중인 대결", Quota.upTo(1), Quota.upTo(3)),
+    CHALLENGE_ACTIVE("진행 중인 대결", Quota.upTo(1), Quota.upTo(3),
+            Quota.upTo(3)),
     /** 우리 둘 합산 목표(협력 모드) — 대결과 대칭되는 짝 기능. */
-    COOP_GOAL_ACTIVE("진행 중인 합산 목표", Quota.upTo(1), Quota.upTo(3)),
+    COOP_GOAL_ACTIVE("진행 중인 합산 목표", Quota.upTo(1), Quota.upTo(3),
+            Quota.upTo(3)),
 
     /* ── 깊이형 (기능 자체를 여닫는다) ────────────────────────────────────── */
 
     /** 작년 오늘 — 데이터가 쌓인 커플일수록 가치가 커진다(= 지불 의사와 같은 곡선). */
-    MEMORIES("추억 리마인드", Quota.blocked(), Quota.unlimited()),
+    MEMORIES("추억 리마인드", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /**
      * 전체 기간 통계 — 무료는 최근 구간만 (구간은 화면에서 결정). <b>식단·운동·물·단식·체중
      * 통계 전 영역이 공유하는 단일 게이트다</b> — "심화 영양 통계", "물·단식 습관 리포트",
      * "체중·칼로리 수지 추이"(2026-08 진단 리포트 제안)를 이 하나로 묶는다. 도메인마다
      * 따로 만들면 한도가 갈라져 유지보수만 늘어난다.
      */
-    FULL_STATS("전체 기간 통계", Quota.blocked(), Quota.unlimited()),
-    WEEKLY_RECAP("주간 결산", Quota.blocked(), Quota.unlimited()),
-    TRIP_EXPENSE("여행 경비 정산", Quota.blocked(), Quota.unlimited()),
-    TRIP_CHECKLIST("여행 준비물 체크리스트", Quota.blocked(), Quota.unlimited()),
+    FULL_STATS("전체 기간 통계", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
+    WEEKLY_RECAP("주간 결산", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
+    TRIP_EXPENSE("여행 경비 정산", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
+    TRIP_CHECKLIST("여행 준비물 체크리스트", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /** 무드 캘린더 — 무료는 최근 30일, PRO는 전체 기간(FULL_STATS 와 같은 모양이지만
      *  화면 성격이 "통계"가 아니라 "캘린더"라 별도 이름을 둔다). */
-    MOOD_CALENDAR_FULL("무드 캘린더 전체 기간", Quota.blocked(), Quota.unlimited()),
+    MOOD_CALENDAR_FULL("무드 캘린더 전체 기간", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /** 회복 완료 부위 전체 카드 + 파트너 회복 상태 비교(현재는 "최근 부위 한 줄"만 무료로 노출). */
-    WORKOUT_RECOVERY_FULL("회복 부위 전체 보기", Quota.blocked(), Quota.unlimited()),
+    WORKOUT_RECOVERY_FULL("회복 부위 전체 보기", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /**
      * 운동 심화 통계 — 볼륨 추이 · 추정 1RM · 부위 밸런스. <b>PRO 대표 기능 세 개 중 하나</b>
      * ({@link #isHero()}).
@@ -178,9 +206,11 @@ public enum Feature {
      * <p>개인 판정이다(커플 아님) — 볼륨·1RM 은 내 몸의 기록이고, 상대 데이터가 있어야
      * 성립하는 {@link #WORKOUT_RECOVERY_FULL}(파트너 회복 비교)과 다르다.
      */
-    WORKOUT_V2_STATS("운동 심화 통계", Quota.blocked(), Quota.unlimited()),
+    WORKOUT_V2_STATS("운동 심화 통계", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /** 사귄 지 1년·연말 자동 생성 연간 결산 — WEEKLY_RECAP·AI_WEEKLY_LETTER 의 연 단위 확장. */
-    ANNIVERSARY_RECAP("우리의 1년 리캡", Quota.blocked(), Quota.unlimited()),
+    ANNIVERSARY_RECAP("우리의 1년 리캡", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /**
      * 영상통화 — 통화 기능(PLAN.md 참고) 중 <b>영상만</b> PRO. 음성통화는 게이팅 없이
      * 전부 무료(경쟁 커플 앱 비트윈도 무료 음성통화만 제공하고 영상통화 자체가 없음 —
@@ -189,21 +219,26 @@ public enum Feature {
      * 영상통화 자체가 막혀 있으면 그 위에 얹는 결합 기능도 당연히 막히므로 별도
      * Feature 를 두지 않는다(2026-08 진단 리포트 제안, PRO_PLAN_DESIGN.md 참고).
      */
-    VIDEO_CALL("영상통화", Quota.blocked(), Quota.unlimited()),
+    VIDEO_CALL("영상통화", Quota.blocked(), Quota.unlimited(),
+            Quota.blocked()),
     /**
      * 스트릭 복구권 — 끊긴 다음날 1회 이어붙이기. 강박 방지 원칙과 부합(끊김의 처벌 완화).
      */
-    STREAK_REPAIR("스트릭 복구권", Quota.blocked(), Quota.perMonth(2)),
+    STREAK_REPAIR("스트릭 복구권", Quota.blocked(), Quota.perMonth(2),
+            Quota.perMonth(2)),
 
     /* ── 꾸미기 (원가 0, 마진 100%) ───────────────────────────────────────── */
 
-    CUSTOM_BACKGROUND("커플 배경 꾸미기", Quota.blocked(), Quota.unlimited()),
-    PREMIUM_STICKER("프리미엄 스티커", Quota.blocked(), Quota.unlimited()),
+    CUSTOM_BACKGROUND("커플 배경 꾸미기", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
+    PREMIUM_STICKER("프리미엄 스티커", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
     /**
      * 가상 터치 프리미엄 제스처(포옹·뽀뽀) — PREMIUM_STICKER 와 판정 근거가 같다(원가 0).
      * 기본 3종(손잡기·토닥임·콕찌르기)은 게이팅 없이 전부 무료. PLAN.md "가상 터치" 참고.
      */
-    TOUCH_GESTURE_PREMIUM("프리미엄 터치 제스처", Quota.blocked(), Quota.unlimited()),
+    TOUCH_GESTURE_PREMIUM("프리미엄 터치 제스처", Quota.blocked(), Quota.unlimited(),
+            Quota.unlimited()),
 
     /* ── 인게이지먼트 (원가 있음 — Cloudinary/AI 콘텐츠라 PRO 도 상한을 둔다) ──── */
 
@@ -211,16 +246,20 @@ public enum Feature {
      * 운동 시작 직전 파트너가 즉석 녹음해 보내는 일회성 응원("음성 응원 2.0", 고정 3문구는
      * 계속 무료). Cloudinary 저장 비용이 있어 PRO 도 무제한이 아니다.
      */
-    WORKOUT_BOOSTER("운동 부스터", Quota.blocked(), Quota.perWeek(3)),
+    WORKOUT_BOOSTER("운동 부스터", Quota.blocked(), Quota.perWeek(3),
+            Quota.perWeek(3)),
     /**
      * 시스템이 내는 오늘의 질문과 별개로, 한 사람이 상대에게 직접 만들어 보내는 질문.
      * 시스템 질문이 무료로 있으므로 커스텀은 맛보기 후 업셀.
      */
-    CUSTOM_QUESTION("서로에게 묻는 질문", Quota.perWeek(1), Quota.perDay(3)),
+    CUSTOM_QUESTION("서로에게 묻는 질문", Quota.perWeek(1), Quota.perDay(3),
+            Quota.perDay(3)),
     /** 채팅 음성 메시지(최대 30초) — Cloudinary 원가형. PRO 100개/일도 사고 방지선일 뿐. */
-    VOICE_MESSAGE("채팅 음성 메시지", Quota.perDay(5), Quota.perDay(100)),
+    VOICE_MESSAGE("채팅 음성 메시지", Quota.perDay(5), Quota.perDay(100),
+            Quota.perDay(30)),
     /** 럽슐랭 매거진의 읽기 전용 공개 웹페이지 — 바이럴 자산이라 무료도 1개는 준다. */
-    PUBLIC_GUIDE_LINK("럽슐랭 공개 가이드", Quota.upTo(1), Quota.unlimited()),
+    PUBLIC_GUIDE_LINK("럽슐랭 공개 가이드", Quota.upTo(1), Quota.unlimited(),
+            Quota.unlimited()),
     /**
      * 기록 전체 내보내기(사진 포함 ZIP) — "내 기록은 언제든 가져갈 수 있다".
      *
@@ -230,7 +269,8 @@ public enum Feature {
      * 넘겨도 업셀하지 않는다({@code PlanGuard} 의 upsells). 키 이름은 사용량·이벤트가 문자열로
      * 들고 있어 그대로 둔다(CSV 는 처음 계획의 흔적).
      */
-    CSV_EXPORT("기록 내보내기", Quota.perWeek(2), Quota.perWeek(2)),
+    CSV_EXPORT("기록 내보내기", Quota.perWeek(2), Quota.perWeek(2),
+            Quota.perWeek(2)),
 
     /**
      * 나만의 하루 기록 사진(최대 1장/일) — 전용 서명({@code JournalService.photoSignature})에서 센다.
@@ -242,7 +282,8 @@ public enum Feature {
      * ({@link #isListed()}) 넘겨도 업셀하지 않는다 — 기록은 무료가 원칙이다("데이터 인질 금지").
      * docs/PERSONAL_JOURNAL_ANALYSIS_2026-10-02.md §5-1.
      */
-    JOURNAL_PHOTO("기록 사진", Quota.perDay(3), Quota.perDay(3)),
+    JOURNAL_PHOTO("기록 사진", Quota.perDay(3), Quota.perDay(3),
+            Quota.perDay(3)),
 
     /**
      * 식단 사진(끼니 사진·영양성분표) — 전용 서명({@code UploadController.mealSignature})에서 센다.
@@ -255,36 +296,63 @@ public enum Feature {
      * 결제 비교표에서 빠지고({@link #isListed()}) 넘겨도 업셀하지 않는다 — {@link #JOURNAL_PHOTO} 와 같은 원칙(기록은 무료).
      * 옛 앱은 공용 서명을 쓰므로 지금처럼 {@link #PHOTO_UPLOAD} 에서 빠진다.
      */
-    MEAL_PHOTO("식단 사진", Quota.perDay(10), Quota.perDay(10)),
+    MEAL_PHOTO("식단 사진", Quota.perDay(10), Quota.perDay(10),
+            Quota.perDay(10)),
     /*
      * 나만의 하루 기록 — 게이팅 없음(둘 다 무제한). COUPLE_GAME 과 같은 이유로 Feature 로 둔다: <b>새 기록을
      * 만들 때만</b> PlanGuard.require 를 지나 FEATURE_USED 가 남는다(수정은 세지 않는다). 본문은 어디에도 싣지 않는다.
      */
-    JOURNAL("나만의 하루 기록", Quota.unlimited(), Quota.unlimited()),
+    JOURNAL("나만의 하루 기록", Quota.unlimited(), Quota.unlimited(),
+            Quota.unlimited()),
 
     /*
      * 협동 게임(스도쿠) — 게이팅 없음(둘 다 무제한). 그래도 Feature 로 두는 이유는 새 판 생성이
      * PlanGuard.require 를 지나 FEATURE_USED 가 남게 하기 위해서다 — 육성을 접을 때의
      * "효과를 측정할 방법이 없다"를 반복하지 않는다. docs/COUPLE_GAMES_DESIGN_2026-09-09.md 3-5.
      */
-    COUPLE_GAME("협동 게임", Quota.unlimited(), Quota.unlimited());
+    COUPLE_GAME("협동 게임", Quota.unlimited(), Quota.unlimited(),
+            Quota.unlimited());
 
     private final String displayName;
     private final Quota free;
     private final Quota pro;
+    /**
+     * <b>한 등급</b>일 때의 한도 — 모든 상수의 세 번째 값({@code fitto.plan.single-tier}, 2026-10-14).
+     *
+     * <p>Dubly Plus(1개월·1년·영구)는 <b>광고 제거만</b> 판다(docs/DUBLY_PLUS_PLAN_2026-10-14.md S1). 그러면 기능
+     * 한도는 결제와 무관하게 모두에게 같고, 남는 숫자는 남용 방지·원가 방어선뿐이다. 값은
+     * docs/MONETIZATION_LIFETIME_2026-10-13.md §1 "새 한도". 예외는 둘: {@link #AI_COUPLE_EMOJI} 는 이미지 원가가 있어
+     * 크라운·산 세트·첫 세트 무료로만 열고, {@link #VIDEO_CALL} 은 앱에서 내린 기능이라 닫아 둔다.
+     *
+     * <p>FREE/PRO 값을 지우지 않고 나란히 두는 이유: 스위치를 켜는 날은 광고 빌드(S4)가 나가는 날이다. 그 전에
+     * 켜면 결제 중인 구독자가 받는 것이 0 이 된다. 켜기 전까지는 지금 그대로 두 등급으로 돈다.
+     */
+    private final Quota open;
 
-    Feature(String displayName, Quota free, Quota pro) {
+    Feature(String displayName, Quota free, Quota pro, Quota open) {
         this.displayName = displayName;
         this.free = free;
         this.pro = pro;
+        this.open = open;
     }
 
     public String displayName() {
         return displayName;
     }
 
+    /** 두 등급 기준의 한도. 판정은 {@link #quotaFor(Plan, boolean)} 를 쓴다. */
     public Quota quotaFor(Plan plan) {
         return plan == Plan.PRO ? pro : free;
+    }
+
+    /** 판정에 쓰는 한도 — 한 등급이면 플랜과 무관하게 {@link #open()}. */
+    public Quota quotaFor(Plan plan, boolean singleTier) {
+        return singleTier ? open : quotaFor(plan);
+    }
+
+    /** 한 등급일 때의 한도. */
+    public Quota open() {
+        return open;
     }
 
     /** FREE 한도 — 플랜 비교 화면이 두 값을 나란히 보여줘야 해서 따로 연다. */

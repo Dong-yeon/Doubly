@@ -58,6 +58,10 @@ public class PlanController {
      */
     @GetMapping("/catalog")
     public ApiResponse<List<PlanCatalogEntry>> catalog() {
+        // 한 등급이면 비교할 한도가 없다 — 빈 목록(옛 결제 화면은 비교표·혜택 줄을 그리지 않는다)
+        if (planGuard.isSingleTier()) {
+            return ApiResponse.success(List.of());
+        }
         return ApiResponse.success(Arrays.stream(Feature.values())
                 .filter(Feature::isListed)
                 .map(PlanCatalogEntry::of)

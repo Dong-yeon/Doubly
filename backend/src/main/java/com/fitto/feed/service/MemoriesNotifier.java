@@ -2,7 +2,6 @@ package com.fitto.feed.service;
 
 import com.fitto.common.plan.Feature;
 import com.fitto.common.plan.PlanResolver;
-import com.fitto.common.plan.Plan;
 import com.fitto.common.notification.NotificationCategory;
 import com.fitto.common.notification.PushLinks;
 import com.fitto.common.notification.NotificationService;
@@ -86,7 +85,8 @@ public class MemoriesNotifier {
             }
             // 열어봐야 잠겨 있는 알림은 보내지 않는다 — 추억은 PRO 기능이다.
             // (MEMORIES 는 커플 단위 판정이라 한쪽만 확인해도 관계 전체가 결정된다)
-            if (planResolver.resolveFor(couple.getUserAId(), Feature.MEMORIES) != Plan.PRO) {
+            // 플랜이 아니라 한도로 본다 — 한 등급(FREE 개방)이면 모두에게 열린다
+            if (planResolver.quotaFor(couple.getUserAId(), Feature.MEMORIES).isBlocked()) {
                 continue;
             }
             String body = body(e.getValue());

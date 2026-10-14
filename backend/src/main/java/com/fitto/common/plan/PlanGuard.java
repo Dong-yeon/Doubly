@@ -102,10 +102,10 @@ public class PlanGuard {
     /** 기능이 이 사용자에게 열려 있는지만 확인한다 (사용량은 건드리지 않음). */
     public void require(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         if (quota.isBlocked()) {
             logBlocked(userId, feature);
-            throw upgradeRequired(feature);
+            throw upgradeRequired(feature, plan);
         }
         if (quota.isCounted()) {
             int used = peekUsage(scopeOf(userId, feature), feature, quota);
@@ -125,10 +125,10 @@ public class PlanGuard {
      */
     public void consume(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         if (quota.isBlocked()) {
             logBlocked(userId, feature);
-            throw upgradeRequired(feature);
+            throw upgradeRequired(feature, plan);
         }
         if (quota.isUnlimited() || !quota.isCounted()) {
             logUsed(userId, feature);
@@ -153,14 +153,14 @@ public class PlanGuard {
      */
     public Charge consumeOrCredit(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         if (quota.isBlocked()) {
             if (creditService.consumeOne(userId, feature)) {
                 logUsed(userId, feature);
                 return Charge.CREDIT;
             }
             logBlocked(userId, feature);
-            throw upgradeRequired(feature);
+            throw upgradeRequired(feature, plan);
         }
         if (quota.isUnlimited() || !quota.isCounted()) {
             logUsed(userId, feature);
@@ -224,7 +224,7 @@ public class PlanGuard {
      */
     public void refund(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         if (quota.isBlocked() || quota.isUnlimited() || !quota.isCounted()) {
             return; // 애초에 센 적이 없다
         }
@@ -248,10 +248,10 @@ public class PlanGuard {
      */
     public void requireCapacity(Long userId, Feature feature, long currentCount) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         if (quota.isBlocked()) {
             logBlocked(userId, feature);
-            throw upgradeRequired(feature);
+            throw upgradeRequired(feature, plan);
         }
         if (quota.isUnlimited()) {
             logUsed(userId, feature);
@@ -281,7 +281,7 @@ public class PlanGuard {
      */
     public boolean allows(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         if (quota.isBlocked()) {
             return feature.sellsCredits() && creditService.remaining(userId, feature) > 0;
         }
@@ -297,7 +297,7 @@ public class PlanGuard {
     /** 표시용 — 앱의 잔여 횟수·잠금 배지에 쓴다. */
     public FeatureState state(Long userId, Feature feature) {
         Plan plan = planResolver.resolveFor(userId, feature);
-        Quota quota = feature.quotaFor(plan);
+        Quota quota = quotaOf(feature, plan);
         int used = quota.isCounted() ? peekUsage(scopeOf(userId, feature), feature, quota) : 0;
         boolean allowed = !quota.isBlocked()
                 && (quota.isUnlimited() || !quota.isCounted() || used < quota.limit());
@@ -330,6 +330,11 @@ public class PlanGuard {
         return planResolver.resolveCouple(userId);
     }
 
+    /** 한 등급(FREE 개방)인가 — 결제 비교표가 비는 근거. */
+    public boolean isSingleTier() {
+        return planResolver.isSingleTier();
+    }
+
     /** 이 사람이 체험 중인가 — 전역 플래그 또는 가입 후 N일. */
     public boolean isInTrial(Long userId) {
         return planResolver.isInTrial(userId);
@@ -340,9 +345,24 @@ public class PlanGuard {
         return planResolver.trialEndsAt(userId);
     }
 
-    private BusinessException upgradeRequired(Feature feature) {
-        return new BusinessException(ErrorCode.PLAN_UPGRADE_REQUIRED,
-                "%s PRO에서 이용할 수 있어요.".formatted(topicParticle(feature.displayName())));
+    /**
+     * 막힌 기능 — 결제(PRO)로 풀리면 402 업셀, 아니면 무엇으로 풀리는지 사실대로.
+     *
+     * <p>한 등급이 되면 모두에게 막힌 기능이 생긴다(우리 이모지·영상통화). 거기에 {@code PLAN_UPGRADE_REQUIRED} 를 주면
+     * 앱이 전역 업그레이드 시트("PRO로 더 넉넉하게")를 띄워 <b>이미 결제한 사람에게도 풀리지 않는 결제를 권한다</b>.
+     * 산 세트·크라운으로 여는 기능은 {@code FEATURE_PURCHASE_REQUIRED}(402 — 앱의 업그레이드 시트가 반응하지 않는 코드),
+     * 그 밖은 {@code FEATURE_NOT_AVAILABLE}.
+     */
+    private BusinessException upgradeRequired(Feature feature, Plan plan) {
+        if (upsells(feature, plan)) {
+            return new BusinessException(ErrorCode.PLAN_UPGRADE_REQUIRED,
+                    "%s PRO에서 이용할 수 있어요.".formatted(topicParticle(feature.displayName())));
+        }
+        if (feature.sellsCredits()) {
+            return new BusinessException(ErrorCode.FEATURE_PURCHASE_REQUIRED);
+        }
+        return new BusinessException(ErrorCode.FEATURE_NOT_AVAILABLE,
+                "%s 지금은 이용할 수 없어요.".formatted(topicParticle(feature.displayName())));
     }
 
     /**
@@ -387,8 +407,14 @@ public class PlanGuard {
      * 이 false — 기록 내보내기)은 결제해도 똑같이 막힌다. 그런데도 402 를 주면 앱이 결제 시트를
      * 띄워 "돈을 내면 풀린다"는 거짓말을 한다.
      */
-    private static boolean upsells(Feature feature, Plan plan) {
-        return !plan.isAtLeast(Plan.PRO) && feature.isComparable();
+    private boolean upsells(Feature feature, Plan plan) {
+        // 한 등급이면 결제로 풀리는 한도가 없다 — Dubly Plus 는 광고 제거만 판다(PlanProperties.singleTier)
+        return !planResolver.isSingleTier() && !plan.isAtLeast(Plan.PRO) && feature.isComparable();
+    }
+
+    /** 판정에 쓰는 한도 — 한 등급 스위치가 켜져 있으면 플랜과 무관한 {@link Feature#open()}. */
+    private Quota quotaOf(Feature feature, Plan plan) {
+        return feature.quotaFor(plan, planResolver.isSingleTier());
     }
 
     private BusinessException limitExceeded(Feature feature, Plan plan, Quota quota) {

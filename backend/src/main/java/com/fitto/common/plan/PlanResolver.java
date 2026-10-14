@@ -50,6 +50,17 @@ public class PlanResolver {
         return properties.isFreeTrial();
     }
 
+    /** 한 등급(FREE 개방)인가 — 켜져 있으면 한도가 플랜과 무관하다({@link Feature#open()}). */
+    public boolean isSingleTier() {
+        return properties.isSingleTier();
+    }
+
+    /** 이 사람이 이 기능에 받는 한도 — 판정({@link #resolveFor})과 한 등급 스위치를 합친 값. */
+    @Transactional(readOnly = true)
+    public Quota quotaFor(Long userId, Feature feature) {
+        return feature.quotaFor(resolveFor(userId, feature), properties.isSingleTier());
+    }
+
     /**
      * 이 사람이 지금 체험 중인가 — 앱의 "체험 중" 배지.
      *

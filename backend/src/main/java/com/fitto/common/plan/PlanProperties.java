@@ -41,4 +41,13 @@ public class PlanProperties {
      * (둘 중 높은 등급 규칙과 같다).
      */
     private int trialDays = 0;
+
+    /**
+     * <b>한 등급</b> — {@code true} 면 모든 기능 한도가 플랜과 무관하게 {@link Feature#open()} 이 된다(FREE 개방).
+     *
+     * <p>Dubly Plus 는 광고 제거만 판다(docs/DUBLY_PLUS_PLAN_2026-10-14.md). <b>광고 빌드(S4)가 나가는 날 켠다</b> —
+     * 먼저 켜면 결제 중인 구독자가 받는 것이 0 이 되고, 옛 결제 화면은 비교표 없이 PRO 결제 버튼만 남는다.
+     * 켜면 402(업셀)가 사라지고 남용 방지 429 만 남는다. 끄면 그대로 돌아간다(환경변수 {@code PLAN_SINGLE_TIER}).
+     */
+    private boolean singleTier = false;
 }

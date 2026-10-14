@@ -282,8 +282,10 @@ public class CoupleEmojiService {
         try {
             return Payment.of(geminiClient.requireImageConfiguredAndCharge(userId, FEATURE));
         } catch (BusinessException refused) {
+            // FEATURE_PURCHASE_REQUIRED = 한 등급(FREE 개방)에서 모두에게 막힌 상태 — 구독이 아니라 무료·재화로만 풀린다
             boolean payable = refused.getErrorCode() == ErrorCode.PLAN_UPGRADE_REQUIRED
-                    || refused.getErrorCode() == ErrorCode.PLAN_LIMIT_EXCEEDED;
+                    || refused.getErrorCode() == ErrorCode.PLAN_LIMIT_EXCEEDED
+                    || refused.getErrorCode() == ErrorCode.FEATURE_PURCHASE_REQUIRED;
             /*
              * PRO 가 이번 달 세트를 다 썼다(429) — 업셀은 아니지만 "한 세트 더"는 살 수 있어야 한다(옛 크레딧도 이 자리를
              * 열었다). 그래서 재화는 429 도 받는다. 첫 무료는 402 에만 — PRO 에게 무료를 줄 이유가 없다.
