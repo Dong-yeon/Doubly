@@ -144,6 +144,10 @@ public class UserDataPurger {
         // 커플 게임(V86) — 관계가 먼저 지워지면 남는 행이 없지만 created_by 가 users 를 참조하므로 안전하게
         exec("delete from quarto_moves where game_id in (select id from couple_games where created_by = :uid)", userId);
         exec("delete from couple_games where created_by = :uid", userId);
+        // 틀린그림찾기 풀이(V143) — 관계 단위 정리에서 이미 지워졌지만 user_id 로 한 번 더(users FK 는 없다 — 남는 행만 막는다)
+        exec("delete from spot_puzzle_taps where play_id in "
+                + "(select pl.id from spot_puzzle_plays pl where pl.user_id = :uid)", userId);
+        exec("delete from spot_puzzle_plays where user_id = :uid", userId);
         // 구독 이력 — users FK 를 물고 있어서 빠뜨리면 탈퇴 전체가 FK 위반으로 실패한다.
         // (환불·정산 근거는 스토어 콘솔에 남으므로 여기서 지워도 된다)
         exec("delete from subscriptions where user_id = :uid", userId);

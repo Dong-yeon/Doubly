@@ -24,6 +24,8 @@ public final class PushLinks {
     public static final String GAME_WALL_RACE = "game/wall-race";
     /** 넷이 같아 — 웹에선 주소창에 보이는 경로라 내부 키(quarto) 대신 중립적인 이름을 쓴다 */
     public static final String GAME_QUARTO = "game/four";
+    /** 사진 틀린그림찾기(V143) */
+    public static final String GAME_SPOT_DIFF = "game/spot-diff";
     public static final String CALENDAR = "calendar";
     public static final String COUPLE_CONNECT = "couple/connect";
     public static final String WORKOUT = "workout";
