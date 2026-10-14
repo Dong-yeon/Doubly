@@ -27,8 +27,11 @@ public final class PolicyVersion {
      * 상대방에게 탈퇴 요청 사실과 삭제 예정일이 알려진다는 점을 고지.
      * 1.5 (2026-10-12): 사진 저장 수탁사에 Cloudflare(R2) 추가 — 새 사진은 R2, Cloudinary 는 옛 사진·일부 기능
      * (docs/r2-migration-plan_2026-10-12.md).
+     * 1.6 (1.0.8 출시일): 광고(Google AdMob)가 광고 식별자 등을 직접 수집 — 5-1 "광고와 행태정보"(거부 방법 포함),
+     * 수집 항목·목적에 이용권(Dubly Plus 영구)과 광고 표시 추가(docs/DUBLY_PLUS_PLAN_2026-10-14.md S5).
+     * <b>앱 1.0.8 빌드와 같은 날 배포한다</b> — 올리는 순간 전원에게 재동의 게이트가 뜬다.
      */
-    public static final String PRIVACY = "1.5";
+    public static final String PRIVACY = "1.6";
 
     private PolicyVersion() {
     }
