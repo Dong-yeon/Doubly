@@ -18,6 +18,10 @@ import type {
   PuzzleBattleRun,
   QuartoGame,
   QuartoMoveBody,
+  SpotDiffList,
+  SpotHintResult,
+  SpotPuzzle,
+  SpotTapResult,
   SudokuDifficulty,
   SudokuGame,
   WallRaceGame,
@@ -129,6 +133,23 @@ export const quartoApi = {
   record: () => unwrap(apiClient.get<ApiResponse<GameRecord>>('/games/quarto/record')),
   /** 끝난 판 최근 20개 — 수 기록 포함 */
   history: () => unwrap(apiClient.get<ApiResponse<QuartoGame[]>>('/games/quarto/history')),
+};
+
+/**
+ * 사진 틀린그림찾기 — docs/spot-diff-design_2026-10-14.md. 판정은 서버가 한다. 정답은 어떤 응답에도 미리 오지 않는다.
+ * 탭은 clientTapId 로 멱등이다(같은 키 재전송 = 저장된 판정).
+ */
+export const spotDiffApi = {
+  /** 최근 퍼즐 — 오늘 것이 없으면 서버가 이때 만들기 시작한다(PENDING) */
+  list: () => unwrap(apiClient.get<ApiResponse<SpotDiffList>>('/games/spot-diff')),
+  get: (id: number) => unwrap(apiClient.get<ApiResponse<SpotPuzzle>>(`/games/spot-diff/${id}`)),
+  /** 퍼즐 화면 열기 — 처음이면 서버가 시작 시각을 적는다(시간은 서버만 잰다) */
+  open: (id: number) => unwrap(apiClient.post<ApiResponse<SpotPuzzle>>(`/games/spot-diff/${id}/open`)),
+  /** x, y 는 이미지 기준 0~1 */
+  tap: (id: number, clientTapId: string, x: number, y: number) =>
+    unwrap(apiClient.post<ApiResponse<SpotTapResult>>(`/games/spot-diff/${id}/taps`, { clientTapId, x, y })),
+  hint: (id: number) => unwrap(apiClient.post<ApiResponse<SpotHintResult>>(`/games/spot-diff/${id}/hints`)),
+  history: () => unwrap(apiClient.get<ApiResponse<SpotPuzzle[]>>('/games/spot-diff/history')),
 };
 
 /**

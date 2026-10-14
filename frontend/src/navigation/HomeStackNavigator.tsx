@@ -31,6 +31,8 @@ import { WallRacePracticeScreen } from '../screens/home/WallRacePracticeScreen';
 import { QuartoScreen } from '../screens/home/QuartoScreen';
 import { QuartoPracticeScreen } from '../screens/home/QuartoPracticeScreen';
 import { QUARTO_DISPLAY_NAME } from '../constants/quarto';
+import { SpotDiffScreen } from '../screens/home/SpotDiffScreen';
+import { SPOT_DIFF_DISPLAY_NAME } from '../constants/spotDiff';
 import { CoupleCalendarScreen } from '../screens/home/CoupleCalendarScreen';
 // 커플 여행 — 장소(럽슐랭) 스택에서 이관 (navigation/types.ts 의 Trip* 주석 참고)
 import { TripListScreen } from '../screens/trip/TripListScreen';
@@ -92,6 +94,7 @@ export function HomeStackNavigator() {
       />
       <Stack.Screen name="Quarto" component={QuartoScreen} options={{ title: QUARTO_DISPLAY_NAME }} />
       <Stack.Screen name="QuartoPractice" component={QuartoPracticeScreen} options={{ title: `${QUARTO_DISPLAY_NAME} 연습` }} />
+      <Stack.Screen name="SpotDiff" component={SpotDiffScreen} options={{ title: SPOT_DIFF_DISPLAY_NAME }} />
       <Stack.Screen
         name="WallRacePractice"
         component={WallRacePracticeScreen}
