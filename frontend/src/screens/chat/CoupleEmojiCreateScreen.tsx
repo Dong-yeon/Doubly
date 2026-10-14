@@ -771,6 +771,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
 
       <AvatarCropSheet
         title="얼굴 맞추기"
+        // AI 입력이라 512 유지 — 크면 비용만 는다(AvatarCropSheet DEFAULT_OUTPUT_SIZE 주석)
+        outputSize={512}
         source={picked}
         onCancel={() => setPicked(null)}
         onConfirm={(uri) => {
