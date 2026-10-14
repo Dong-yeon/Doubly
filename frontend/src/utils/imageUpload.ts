@@ -63,6 +63,11 @@ function measure(uri: string): Promise<{ width: number; height: number }> {
   });
 }
 
+/** 크기를 모르는 로컬 사진(uri 만 들고 있는 미리보기 목록 등)을 자르기에 넘길 모양으로 */
+export async function measureImage(uri: string): Promise<PickedImage> {
+  return { uri, ...(await measure(uri)) };
+}
+
 async function toPicked(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   if (asset.width > 0 && asset.height > 0) {
     return { uri: asset.uri, width: asset.width, height: asset.height };

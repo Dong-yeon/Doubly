@@ -23,6 +23,7 @@ import { clearWritingDraft, draftKeys, loadWritingDraft, saveWritingDraft } from
 import { haptics } from '../../utils/haptics';
 import { useDirtyGuard } from '../../hooks/useDirtyGuard';
 import { useSpacingFix } from '../../hooks/useSpacingFix';
+import { usePhotoCrop } from '../../hooks/usePhotoCrop';
 import { SpacingFixBar } from '../../components/SpacingFixBar';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
@@ -188,6 +189,15 @@ export function FeedComposeScreen({ navigation, route }: Props) {
     setPhotoUris((prev) => prev.filter((_, i) => i !== index));
   };
 
+  /*
+   * 사진 자르기 — 썸네일을 누르면 연다(docs/chat-photo-crop_2026-10-14.md). 아직 안 올린 사진만 — 고치기에서 그대로 둔
+   * 서버 사진은 이미 올라가 있어 자르려면 받아서 다시 올려야 한다(한도 소모). 잘린 사진은 새 uri 라 업로드 캐시
+   * (uploadedRef)에 없으니 저장 때 새로 올라간다. 그사이 목록이 바뀌었으면(같은 자리에 다른 사진) 버린다.
+   */
+  const crop = usePhotoCrop((index, image, previousUri) => {
+    setPhotoUris((prev) => (prev[index] === previousUri ? prev.map((u, i) => (i === index ? image.uri : u)) : prev));
+  });
+
   const onSave = async () => {
     if (savingRef.current) return;
     if (!content.trim() && photoUris.length === 0) {
@@ -324,7 +334,22 @@ export function FeedComposeScreen({ navigation, route }: Props) {
             >
               {photoUris.map((uri, index) => (
                 <View key={uri + index} style={styles.thumbBox}>
-                  <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+                  {isRemote(uri) ? (
+                    <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.thumb}
+                      onPress={() => void crop.open(index, uri)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`사진 ${index + 1} 자르기`}
+                    >
+                      <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+                      <View style={styles.thumbCrop} pointerEvents="none">
+                        <MaterialCommunityIcons name="resize" size={12} color={colors.white} />
+                      </View>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.thumbRemove}
                     onPress={() => onRemovePhoto(index)}
@@ -392,6 +417,7 @@ export function FeedComposeScreen({ navigation, route }: Props) {
             style={styles.saveBtn}
           />
       </FormKeyboardView>
+      {crop.sheet}
     </SafeAreaView>
   );
 }
@@ -439,6 +465,18 @@ const styles = themedStyles((colors) => ({
     backgroundColor: colors.surfaceAlt,
   },
   thumb: { width: '100%', height: '100%' },
+  // 자르기 표시 — 썸네일을 누르면 자를 수 있다는 것만 알린다(누르는 자리는 썸네일 전체)
+  thumbCrop: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   thumbRemove: {
     position: 'absolute',
     top: 4,
