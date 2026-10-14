@@ -230,6 +230,8 @@ class QuartoFlowTest {
 
         List<ChatMessage> cards = chatMessageRepository.findAll().stream()
                 .filter(m -> m.getMessageType() == MessageType.GAME_CARD)
+                // findAll 은 순서를 보장하지 않는다 — PostgreSQL 에서는 다른 테스트의 카드가 끝에 온다
+                .sorted(java.util.Comparator.comparing(ChatMessage::getId))
                 .toList();
         assertThat(cards.get(cards.size() - 1).getContent()).contains(QuartoGame.DISPLAY_NAME).contains("승리");
 
