@@ -472,6 +472,9 @@ fingerprint 를 바꾸는 변경이라 지금 빌드에 업데이트를 계속 �
   넷이 같아 미리보기 판정 검증(2026-10-13). 그때까지는 그 명령을 직접 돌린다.
 - 같은 식으로 `"verify:omok": "node --experimental-strip-types scripts/verify-omok.mjs"` — 오목 연습 판 규칙·AI·레슨(2026-10-13).
 - `"verify:wallrace": "node --experimental-strip-types scripts/verify-wallrace.mjs"` — 길막기 연습 판 규칙(서버 테스트와 같은 케이스)·AI·레슨(2026-10-13).
+- **위 넷은 브랜치 `feat/dubly-plus-app`(1.0.8, 광고 SDK·Dubly Plus 영구)에 이미 넣었다(2026-10-14).** 그 브랜치를 빌드 날 main 에
+  병합한다 — 미리 병합하면 main 의 fingerprint 가 바뀌어 다른 세션의 OTA 가 1.0.7 에 배달되지 않는다. 빌드 전 체크리스트는
+  docs/DUBLY_PLUS_PLAN_2026-10-14.md §5 상자.
 
 ### 1.0.7 에 묶은 것 (2026-10-06, 브랜치 `feat/invite-applinks-location`)
 
