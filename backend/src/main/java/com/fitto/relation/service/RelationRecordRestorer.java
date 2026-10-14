@@ -90,6 +90,38 @@ public class RelationRecordRestorer {
         move("workouts", "relation_id", oldRelationId, newRelationId);
 
         /*
+         * 아래도 전부 relations FK(ON DELETE 없음)다 — 하나라도 남으면 "옛 관계 삭제"가 FK 위반으로 실패해
+         * 복원 전체가 500 으로 되돌아갔다(2026-10-14: 게임을 한 판이라도 연 커플이면 복원 불가였다).
+         * 새 테이블이 relations 를 참조하면 Purger 와 함께 여기에도 넣는다.
+         *
+         * 커플 게임(V86): 끝낸·접은 판은 전적·스트릭의 원장이라 그대로 옮긴다. 옛 관계에서 <b>진행 중이던 판은 접고</b>
+         * 옮긴다 — 서비스는 "종목당 진행 중인 판은 하나"를 전제로 최신 IN_PROGRESS 를 고르는데, 재회 뒤 새로 연
+         * 판이 있으면 둘이 겹친다. 헤어지기 전에 멈춘 판이 재회 뒤 차례·재촉과 함께 되살아날 이유도 없다.
+         * 접은 판은 사용자가 접은 판과 같다(기록·전적에 남지 않음, {@code GameExpiryService} 와 같은 규칙).
+         * quarto_moves 등 수 이력은 couple_games 를 가리키므로 판을 따라간다.
+         */
+        em.createNativeQuery("update couple_games set status = 'ABANDONED' "
+                        + "where couple_id = :old and status = 'IN_PROGRESS'")
+                .setParameter("old", oldRelationId).executeUpdate();
+        move("couple_games", "couple_id", oldRelationId, newRelationId);
+        // 영화·공연 기록(V65)은 맛집과 같은 공유 기록이다 — 로그·평점은 contents 를 따라간다
+        moved += move("contents", "couple_id", oldRelationId, newRelationId);
+        // 통화 이력·식단 찌르기·선물함 — 이력이라 그대로 옮긴다. 식단 찌르기는 (sender, 날짜) UNIQUE 라 관계와 무관하게 겹치지 않는다
+        move("call_sessions", "couple_id", oldRelationId, newRelationId);
+        move("meal_nudges", "relation_id", oldRelationId, newRelationId);
+        move("routine_gifts", "relation_id", oldRelationId, newRelationId);
+        move("favorite_food_gifts", "relation_id", oldRelationId, newRelationId);
+        /*
+         * 운동 부스터(V61)는 상대의 다음 운동 시작 때 한 번 재생된다. 안 들은 채로 옮기면 헤어지기 전 녹음이 재회 뒤
+         * 갑자기 재생된다(예약 전송을 옮기지 않는 것과 같은 이유). 지우지 않고 들은 것으로 바꾸는 이유는 audio_url 을
+         * 나중에 Purger 가 거둬 가도록 행을 남기기 위해서다 — 여기서 지우면 업로드 파일이 고아가 된다.
+         */
+        em.createNativeQuery("update workout_boosters set played_at = current_timestamp "
+                        + "where relation_id = :old and played_at is null")
+                .setParameter("old", oldRelationId).executeUpdate();
+        move("workout_boosters", "relation_id", oldRelationId, newRelationId);
+
+        /*
          * 커플 스트릭은 옮기지 않고 버린다.
          * "연속 N일"은 끊김 없이 이어졌다는 뜻인데, 헤어져 있던 기간만큼 실제로 끊겼다.
          * 옛 기록을 그대로 가져오면 공백을 건너뛴 가짜 연속 기록이 된다.
