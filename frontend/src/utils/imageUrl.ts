@@ -24,6 +24,10 @@ const UPLOAD_MARKER = '/image/upload/';
  * @param size 칸 한 변의 길이(dp)
  */
 export function thumbnailUrl(url: string, size = 150): string {
+  const px = Math.max(1, Math.round(size)) * 2;
+  if (isR2(url)) {
+    return r2Resized(url, `width=${px},height=${px},fit=cover`);
+  }
   if (!url || !url.includes(UPLOAD_MARKER)) {
     return url;
   }
@@ -32,7 +36,6 @@ export function thumbnailUrl(url: string, size = 150): string {
   if (rest.startsWith('w_')) {
     return url;
   }
-  const px = Math.max(1, Math.round(size)) * 2;
   return `${prefix}${UPLOAD_MARKER}w_${px},h_${px},c_fill,q_auto,f_auto/${rest}`;
 }
 
@@ -41,6 +44,9 @@ export function thumbnailUrl(url: string, size = 150): string {
  * 비율은 그대로 두고(c_limit) 원본보다 키우지 않는다. `widthDp` 의 2배 픽셀로 요청한다.
  */
 export function cardImageUrl(url: string, widthDp = 360): string {
+  if (isR2(url)) {
+    return r2Resized(url, `width=${Math.max(1, Math.round(widthDp)) * 2},fit=scale-down`);
+  }
   if (!url || !url.includes(UPLOAD_MARKER)) {
     return url;
   }
@@ -50,4 +56,27 @@ export function cardImageUrl(url: string, widthDp = 360): string {
   }
   const px = Math.max(1, Math.round(widthDp)) * 2;
   return `${prefix}${UPLOAD_MARKER}w_${px},c_limit,q_auto,f_auto/${rest}`;
+}
+
+/**
+ * R2(2026-10-12~) 사진 줄이기 — Cloudflare 이미지 변환({@code /cdn-cgi/image/<옵션>/<경로>}).
+ *
+ * <p>R2 는 Cloudinary 처럼 주소에 변환을 끼울 수 없어 지금까지 원본(최대 2048px)을 그대로 받았다 — 채팅 말풍선
+ * 200dp 칸에도(docs/chat-photo-crop_2026-10-14.md §1-2). 같은 영역(media.dubly.co.kr)에 Cloudflare 이미지 변환을
+ * 켜면 경로 앞에 옵션만 붙여 줄인 사본을 받는다.
+ *
+ * <p><b>영역 대시보드에서 변환(Images › Transformations)을 켜야 동작한다</b> — 꺼진 채로 주소를 바꾸면 404 다
+ * (2026-10-14 확인). 그래서 스위치로 둔다. {@code onerror=redirect} 는 변환이 실패하면(무료 한도 초과 등) 원본으로
+ * 돌려보내 사진이 깨지지 않게 한다.
+ */
+export const R2_IMAGE_RESIZE = false;
+const R2_BASE = 'https://media.dubly.co.kr/';
+
+function isR2(url: string | null | undefined): boolean {
+  return R2_IMAGE_RESIZE && !!url && url.startsWith(R2_BASE) && !url.startsWith(`${R2_BASE}cdn-cgi/`);
+}
+
+function r2Resized(url: string, options: string): string {
+  const key = url.slice(R2_BASE.length);
+  return `${R2_BASE}cdn-cgi/image/${options},quality=80,format=auto,onerror=redirect/${key}`;
 }
