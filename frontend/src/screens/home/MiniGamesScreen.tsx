@@ -16,8 +16,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { HomeStackParamList } from '../../navigation/types';
 import { MaterialCommunityIcons } from '../../components/Icon';
 import { EmptyState } from '../../components/EmptyState';
-import { catchMindApi, gameStreakApi, omokApi, puzzleApi, quartoApi, sudokuApi, wallRaceApi } from '../../api/game';
+import { catchMindApi, gameStreakApi, omokApi, puzzleApi, quartoApi, spotDiffApi, sudokuApi, wallRaceApi } from '../../api/game';
 import { QUARTO_DISPLAY_NAME } from '../../constants/quarto';
+import { SPOT_DIFF_DISPLAY_NAME } from '../../constants/spotDiff';
 import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import { useRelationStore } from '../../store/relationStore';
 import { getErrorMessage } from '../../utils/error';
@@ -30,6 +31,7 @@ import type {
   OmokGame,
   PuzzleBattleGame,
   QuartoGame,
+  SpotDiffList,
   SudokuGame,
   WallRaceGame,
 } from '../../types';
@@ -46,6 +48,7 @@ export function MiniGamesScreen({ navigation }: Props) {
   const [puzzle, setPuzzle] = useState<PuzzleBattleGame | null>(null);
   const [wallRace, setWallRace] = useState<WallRaceGame | null>(null);
   const [quarto, setQuarto] = useState<QuartoGame | null>(null);
+  const [spotDiff, setSpotDiff] = useState<SpotDiffList | null>(null);
   const [daily, setDaily] = useState<DailySudoku | null>(null);
   const [streak, setStreak] = useState<GameStreak | null>(null);
   const [openingDaily, setOpeningDaily] = useState(false);
@@ -53,7 +56,7 @@ export function MiniGamesScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, o, h, d, st, cm, pz, wr, qt] = await Promise.all([
+      const [s, o, h, d, st, cm, pz, wr, qt, sd] = await Promise.all([
         sudokuApi.current(),
         omokApi.current(),
         // 전적은 서버가 센다(끝낸 판 전부). 실패해도 카드 전체를 비우지 않게 따로 받는다
@@ -65,7 +68,10 @@ export function MiniGamesScreen({ navigation }: Props) {
         wallRaceApi.current(),
         // 새 종목 — 서버가 아직 모르는 경로여도 다른 카드까지 비우지 않게 따로 삼킨다
         quartoApi.current().catch(() => null),
+        // 틀린그림찾기(V143) — 같은 이유로 따로 삼킨다
+        spotDiffApi.list().catch(() => null),
       ]);
+      setSpotDiff(sd);
       setSudoku(s);
       setOmok(o);
       setCatchMind(cm);
@@ -127,6 +133,21 @@ export function MiniGamesScreen({ navigation }: Props) {
       ? quarto.myAction === 'GIVE' ? '내 차례 · 건넬 말 고르기' : `내 차례 · ${Math.max(0, quarto.moveNo - 1)}/16칸`
       : `${quarto.partnerName ?? '상대'} 차례 · ${Math.max(0, quarto.moveNo - 1)}/16칸`
     : '상대가 고른 말로 넷이 같은 줄 만들기';
+
+  // 틀린그림찾기 — 내가 아직 풀 수 있는 판이 있으면 "풀 차례"
+  const spotOpen = spotDiff?.puzzles.find((p) => p.status === 'READY' && !p.closed && !p.me.finished) ?? null;
+  const spotLatest = spotDiff?.puzzles[0] ?? null;
+  const spotStatus = spotOpen
+    ? spotOpen.me.started
+      ? `푸는 중 · ${spotOpen.me.found.length}/${spotOpen.diffCount} · ${spotOpen.partnerName ?? '상대'} ${spotOpen.partnerFound}개`
+      : `새 퍼즐 · ${spotOpen.partnerName ?? '상대'} ${spotOpen.partnerFound}개 찾음`
+    : spotLatest?.status === 'PENDING'
+      ? '퍼즐을 만드는 중이에요'
+      : spotLatest?.status === 'NOT_ENOUGH_PHOTOS'
+        ? '함께 보는 사진이 5장 이상 필요해요'
+        : spotLatest?.me.finished && !spotLatest.result
+          ? '다 찾았어요 · 상대를 기다리는 중'
+          : '우리 사진에서 다른 곳 다섯 군데';
 
   /* 내 차례인가 = 상대가 낸 문제를 내가 아직 못 맞혔는가 */
   const catchMindMine = catchMind?.role === 'GUESSER';
@@ -271,6 +292,16 @@ export function MiniGamesScreen({ navigation }: Props) {
           badge={quarto ? (quarto.myTurn ? '내 차례' : '기다리는 중') : undefined}
           highlight={!!quarto?.myTurn}
           onPress={() => navigation.navigate('Quarto')}
+        />
+
+        {/* 사진 틀린그림찾기 — 승부 없이 각자 풀고 기록을 나란히 본다. docs/spot-diff-design_2026-10-14.md */}
+        <GameCard
+          icon="image-outline"
+          title={SPOT_DIFF_DISPLAY_NAME}
+          subtitle={spotStatus}
+          badge={spotOpen ? '풀 차례' : undefined}
+          highlight={!!spotOpen}
+          onPress={() => navigation.navigate('SpotDiff')}
         />
 
         <GameCard
