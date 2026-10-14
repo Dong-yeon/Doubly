@@ -132,6 +132,28 @@ CREATE INDEX idx_user_entitlements_user ON user_entitlements (user_id, entitleme
 
 ## 5. S4 — 앱 1.0.8 네이티브 빌드
 
+> **코드 완료(2026-10-14) — 브랜치 `feat/dubly-plus-app`, main 미병합.** 광고 SDK 는 fingerprint 를 바꾸므로 main 에 넣으면
+> 다른 세션의 OTA 가 1.0.7 에 배달되지 않는다 → **1.0.8 빌드 날 병합**한다. 들어간 것:
+> - `react-native-google-mobile-ads` **17.0.0 고정**(17.1 이상은 RN ≥ 0.86 요구, 지금 0.85.3), `expo-tracking-transparency` ~56.0.5.
+>   app.json 플러그인(**지금은 구글 공개 테스트 앱 id**), 버전 1.0.8, `fingerprint.config.js` 동작 문구 훅 제거, verify 스크립트 3개 등록.
+> - `utils/ads.ts`(첫 배너 때만 UMP → ATT → 초기화, Plus 면 SDK 를 깨우지 않음)·`components/AdBanner.tsx`(로드 전·Plus 면 0 높이,
+>   못 받아 오면 빈 칸 없음, "광고 없이 쓰기" 링크). 배치: 홈 칸 줄 아래, 우리 기록 목록 세 번째 위. `.web` 짝 둘 다 있음.
+> - `constants/ads.ts` — 배너 단위 id(비어 있으면 테스트 광고, `__DEV__` 는 늘 테스트).
+> - `planStore.adFree`(**기본 true** — 모르면 광고를 띄우지 않는다)·`adFreeSource`·`lifetimeOwned`, 홈·채팅에서 `PLAN` 이벤트 → 다시 읽기.
+> - `iap.ts` 영구권: `fetchLifetimeProduct`·`requestLifetimePurchase`·`verifyLifetimeAndFinish`(isConsumable false, 'done' 기록으로 매 실행 재검증 방지).
+> - `PlanScreen` 다시 씀: 1개월·1년·영구 카드(스토어에 있는 것만, 기본 선택 영구), 상대 덕분·구독 중·영구 보유 상태, 구독 고지 + 영구 고지.
+> - 탈퇴 확인문: 영구 보유면 "새 계정으로 옮겨지지 않아요", 본인 구독이면 "스토어에서 해지".
+> - 방침 1.6(앱 `legal.ts`·서버 `PolicyVersion`·`landing/privacy.html` 같은 본문) — 5-1 광고와 행태정보.
+> - `StoreProductIdSyncTest` 에 영구 상품 id 대조.
+>
+> **계획과 달라진 것**: `UpgradeSheet` 는 **이번 빌드에서 지우지 않았다.** 스위치(`PLAN_SINGLE_TIER`)를 켜기 전까지 서버는 여전히
+> 402 를 주므로, 시트가 없으면 FREE 사용자가 한도에 막혀도 아무 안내가 없다. 스위치를 켜면 402 가 사라져 시트는 뜰 일이 없다 —
+> 그 뒤 OTA 로 지운다.
+>
+> **빌드 전에 남은 것**: ① AdMob 실제 앱 id(app.json)·배너 단위 id(`constants/ads.ts`) ② 방침 시행일을 출시일로(`legal.ts`·landing)
+> ③ `landing/app-ads.txt`(AdMob 게시자 id 필요) ④ 실기기에서 홈 레이아웃(홈은 스크롤이 없다 — 작은 화면에서 배너가 칸을 밀어내는지)
+> ⑤ 콘솔 `plus_lifetime` 등록 후 샌드박스 구매·복원·환불 ⑥ iOS ATT 문구가 심사에 맞는지.
+
 ### 5-1. 광고
 
 | 항목 | 내용 |
