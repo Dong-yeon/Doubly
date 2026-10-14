@@ -190,6 +190,8 @@ const GROUP_GAP_MS = 5 * 60 * 1000;
  * 보내게 두면 한 번의 손짓으로 월 한도의 절반이 사라진다.
  */
 const MAX_CHAT_IMAGES = 5;
+/** 사진 뷰어가 방의 지난 사진을 받는 페이지 상한 — 서버 페이지(30장)×100 = 3,000장 */
+const ROOM_PHOTO_MAX_PAGES = 100;
 
 /**
  * 채팅 사진 업로드 전 장변 상한(px). 갤러리 피커는 압축률(quality 0.7)만 낮출 뿐 화소는 원본 그대로라
@@ -242,7 +244,11 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   const panelHeight = Math.max(0, keyboardPanelHeight - (Platform.OS === 'ios' ? bottomInset : 0));
   /* 전체화면으로 연 사진 — 목록에서 이 uri 를 찾아 그 자리에서 시작한다(아래 viewing) */
   const [viewingImage, setViewingImage] = useState<string | null>(null);
-  const openImage = (uri: string) => setViewingImage(uri);
+  // 여는 순간 방의 지난 사진도 받기 시작한다(아래 roomPhotos) — 기다리지 않고 먼저 연다
+  const openImage = (uri: string) => {
+    setViewingImage(uri);
+    void loadRoomPhotos();
+  };
   const myId = useAuthStore((s) => s.user?.id);
   /*
    * 말풍선 옆 프로필 사진용 — relationId/title 만 오는 라우트 파라미터엔 이미지가
@@ -271,18 +277,53 @@ export function ChatRoomScreen({ navigation, route }: Props) {
    * <p>식단 사진은 넣지 않는다. 기록 카드에 딸린 그림이라 "주고받은 사진"과 성격이 다르고,
    * 섞이면 장수 표시가 무엇을 세는지 알 수 없어진다 — 그건 아래 viewing 에서 단건으로 연다.
    */
+  /*
+   * 방의 사진 전부 — 화면에 받아 둔 메시지는 최근 한 페이지(대개 오늘)뿐이라, 그것만으로 목록을 만들면 오늘 사진만
+   * 넘겨졌다(2026-10-14 문의). 사진을 처음 열 때 서버 사진 모아보기(GET /chat/rooms/{id}/photos, 사진첩과 같은 API)를
+   * 끝까지 받아 받아 둔 메시지와 합친다. 페이지마다 목록이 늘어나고, 뷰어는 보던 사진에 머문다(ImageViewer currentKey).
+   * 방에 머무는 동안 한 번만 받는다 — 그 뒤에 오간 사진은 받아 둔 메시지 쪽에 있다.
+   */
+  const [roomPhotos, setRoomPhotos] = useState<ChatMessage[]>([]);
+  const roomPhotosRequested = useRef(false);
+  const loadRoomPhotos = useCallback(async () => {
+    if (roomPhotosRequested.current) return;
+    roomPhotosRequested.current = true;
+    const all: ChatMessage[] = [];
+    let cursor: number | undefined;
+    try {
+      // 상한 — 몇 년치여도 메시지 메타데이터만이라 가볍지만, 끝없는 루프는 막는다
+      for (let page = 0; page < ROOM_PHOTO_MAX_PAGES; page++) {
+        const batch = await chatApi.photos(relationId, cursor);
+        if (batch.length === 0) break;
+        all.push(...batch);
+        setRoomPhotos([...all]);
+        const oldest = batch[batch.length - 1].id;
+        if (cursor !== undefined && oldest >= cursor) break; // 커서가 안 줄면 멈춘다(서버 이상 방어)
+        cursor = oldest;
+      }
+    } catch {
+      // 받은 데까지만 쓴다 — 다음에 다시 열면 처음부터 다시 받는다
+      roomPhotosRequested.current = false;
+    }
+  }, [relationId]);
+
   const viewerImages = useMemo<ViewerImage[]>(
-    () =>
-      messages
-        .filter((m) => m.messageType === 'IMAGE' && !!m.imageUrl)
-        .reverse()
+    () => {
+      // 받아 둔 메시지가 최신이다(삭제 표시·새 사진) — 같은 id 면 그쪽을 쓴다
+      const byId = new Map<number, ChatMessage>();
+      for (const m of roomPhotos) byId.set(m.id, m);
+      for (const m of messages) byId.set(m.id, m);
+      return [...byId.values()]
+        .filter((m) => m.messageType === 'IMAGE' && !!m.imageUrl && !m.deleted)
+        .sort((a, b) => a.id - b.id)
         .map((m) => ({
           key: String(m.id),
           uri: m.imageUrl!,
           title: `${m.senderId === myId ? '나' : partnerName}  ·  ${chatDateDividerLabel(m.createdAt)}`,
           titleColor: m.senderId === myId ? colors.meText : colors.partnerText,
-        })),
-    [messages, myId, partnerName],
+        }));
+    },
+    [roomPhotos, messages, myId, partnerName],
   );
   /*
    * 목록에 있는 사진이면 그 자리에서 열어 좌우로 넘길 수 있게 하고, 목록에 없는 사진
