@@ -182,6 +182,24 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
     if (visible) resetDrag();
   }, [visible, resetDrag]);
 
+  /*
+   * 보던 사진의 키 — 열려 있는 동안 목록이 늘어도(채팅방이 지난 사진을 서버에서 더 받아 앞에 붙이는 경우) 같은 사진에
+   * 머물게 한다. 위치(index)만 들고 있으면 앞에 붙은 장수만큼 다른 사진으로 밀려난다.
+   */
+  const shownImages = useRef(images);
+  useEffect(() => {
+    const before = shownImages.current;
+    shownImages.current = images;
+    if (!visible || before === images) return;
+    // 바뀌기 전 목록에서 보던 사진 → 새 목록에서의 자리. 목록 교체는 커밋 직후 여기서 먼저 맞춰지고,
+    // 스크롤로 인한 위치 갱신(onViewableChanged)은 그 뒤에 온다
+    const key = before[index]?.key;
+    const at = key ? images.findIndex((img) => img.key === key) : -1;
+    if (at < 0 || at === index) return;
+    setIndex(at);
+    listRef.current?.scrollToIndex({ index: at, animated: false });
+  }, [images, visible, index]);
+
   const onViewableChanged = useRef(
     ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       const first = viewableItems[0]?.index;
@@ -413,6 +431,35 @@ export function ImageViewer({ images, initialIndex, onClose }: Props) {
         {/* 버튼·설명은 사진을 따라 움직이지 않고 함께 옅어진다 — 끌던 손이 버튼을 스치지 않게 */}
         <Animated.View style={[styles.chrome, { opacity: chromeOpacity }]} pointerEvents="box-none">
 
+        {/*
+          이전·다음 — 웹(PC)만. 마우스로는 끌어 넘기기가 안 돼서 여러 장이어도 첫 장밖에 못 봤다
+          ("일상 사진을 넘겨 볼 수 없다" 문의, 2026-10-14). 폰은 스와이프가 있어 화면을 가리지 않게 숨긴다.
+        */}
+        {Platform.OS === 'web' && images.length > 1 ? (
+          <>
+            {index > 0 ? (
+              <Pressable
+                style={[styles.navBtn, styles.navPrev]}
+                onPress={() => listRef.current?.scrollToIndex({ index: index - 1, animated: true })}
+                accessibilityRole="button"
+                accessibilityLabel="이전 사진"
+              >
+                <MaterialCommunityIcons name="chevron-left" size={32} color={colors.white} />
+              </Pressable>
+            ) : null}
+            {index < images.length - 1 ? (
+              <Pressable
+                style={[styles.navBtn, styles.navNext]}
+                onPress={() => listRef.current?.scrollToIndex({ index: index + 1, animated: true })}
+                accessibilityRole="button"
+                accessibilityLabel="다음 사진"
+              >
+                <MaterialCommunityIcons name="chevron-right" size={32} color={colors.white} />
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
+
         {/* 닫기 — 배경 탭만으로는 어포던스가 없고 스크린리더에도 노출되지 않는다 */}
         <Pressable
           style={[styles.close, { top: insets.top + spacing.sm }]}
@@ -556,6 +603,20 @@ const styles = themedStyles((colors) => ({
   // 버튼·설명 층. box-none 이라 빈 곳의 터치는 아래(사진)로 지나간다
   chrome: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   page: { alignItems: 'center', justifyContent: 'center' },
+  // 웹 이전·다음 — 세로 가운데, 사진 위에 반투명 원
+  navBtn: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  navPrev: { left: spacing.md },
+  navNext: { right: spacing.md },
   close: {
     position: 'absolute',
     left: spacing.md,
