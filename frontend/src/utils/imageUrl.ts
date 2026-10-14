@@ -66,10 +66,10 @@ export function cardImageUrl(url: string, widthDp = 360): string {
  * 켜면 경로 앞에 옵션만 붙여 줄인 사본을 받는다.
  *
  * <p><b>영역 대시보드에서 변환(Images › Transformations)을 켜야 동작한다</b> — 꺼진 채로 주소를 바꾸면 404 다
- * (2026-10-14 확인). 그래서 스위치로 둔다. {@code onerror=redirect} 는 변환이 실패하면(무료 한도 초과 등) 원본으로
+ * (2026-10-14 확인) — 같은 날 사용자가 켰고(This zone only), 경로 형식에서 cf-resized 응답·onerror 리다이렉트까지 확인해 스위치를 켰다. {@code onerror=redirect} 는 변환이 실패하면(무료 한도 초과 등) 원본으로
  * 돌려보내 사진이 깨지지 않게 한다.
  */
-export const R2_IMAGE_RESIZE = false;
+export const R2_IMAGE_RESIZE = true;
 const R2_BASE = 'https://media.dubly.co.kr/';
 
 function isR2(url: string | null | undefined): boolean {
