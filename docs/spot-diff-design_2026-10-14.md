@@ -47,6 +47,11 @@ KST 00:00  Spring @Scheduled ─ 활성 커플마다 오늘 퍼즐 행(PENDING) 
 - 변형 4종 color/remove/clone/flip, `objectness ≥ 2.0` 에서만 color, 차이 영역 최소 거리(짧은 변 14%), 보이는 차이 검사(`min_diff`).
 - **얼굴 보호**: OpenCV Haar(frontal) 로 얼굴을 찾고 bbox 를 1.3배 넓힌 영역과 겹치는 후보는 버린다. 실제로 바뀐 픽셀(차이 > 12)이 그 영역에 닿아도 버린다(clone 이 번지는 경우).
 - 재현성: `photo source`, `seed`, `level`, `generator_version`, layout(정규화한 cx, cy, r, kind) 저장. **r 은 긴 변 기준 정규화**(시제품과 같다).
+- 시제품과 달라진 두 가지(구현 중 발견): ① 최소 거리를 superpixel 중심이 아니라 **저장되는 중심**(바뀐 픽셀 평균)으로 잰다 ② r 을 bbox 절반이
+  아니라 **중심에서 가장 먼 바뀐 픽셀까지**로 잡는다 — bbox 절반이면 모양이 치우친 변형의 일부가 원 밖에 남아 "바뀐 데를 눌렀는데 오답"이 된다.
+  얼굴 보호는 바뀐 정도가 1 이라도 보호 영역에 닿으면 버린다.
+- 원본 주소는 https + 허용 호스트(`res.cloudinary.com`, `media.dubly.co.kr`)만 받는다 — 식단·운동·방문 URL 은 저장 때 검사하지 않으므로,
+  사설망 안의 worker 가 아무 주소나 받으면 내부 서비스를 두드리는 통로가 된다.
 
 ## 5. 판정 (서버)
 
