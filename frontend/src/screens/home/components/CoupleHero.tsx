@@ -77,7 +77,7 @@ export interface CoupleHeroProps {
   /** 기준 날짜 (YYYY-MM-DD) — 없으면 D+ 대신 "기념일 정하기"가 뜬다 */
   anniversaryDate?: string | null;
   onPressDday: () => void;
-  /** 한 사람의 열(아바타·이름)을 눌렀을 때 — 그 사람의 기록으로 이동 */
+  /** 한 사람의 열(아바타·이름)을 눌렀을 때 — 프로필 시트(그 안에 기록 보기 버튼) */
   onPressPerson?: (who: 'me' | 'partner') => void;
   /** 운동/식단 버튼을 눌렀을 때 — 그 종류의 기록 화면으로 이동 */
   onPressToday?: (who: 'me' | 'partner', kind: 'workout' | 'meal') => void;
@@ -189,7 +189,7 @@ function PersonColumn({
         style={({ pressed }) => [styles.person, pressed && styles.pressed]}
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${person.name}님의 기록 보기${person.today ? `. ${todayRingLabel(person.today, !!person.snack)}` : ''}${moodNote ? `. 한마디: ${moodNote}` : ''}`}
+        accessibilityLabel={`${person.name}님 프로필 보기${person.today ? `. ${todayRingLabel(person.today, !!person.snack)}` : ''}${moodNote ? `. 한마디: ${moodNote}` : ''}`}
       >
         {/*
           오늘 챙김 링 — 바깥 68(예전 테두리 링 64). 아바타 56 은 그대로, 링과 사이에 배경색 틈 2.

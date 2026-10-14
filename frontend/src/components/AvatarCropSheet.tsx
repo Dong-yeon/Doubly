@@ -42,9 +42,12 @@ import { haptics } from '../utils/haptics';
 import { fontSize, radius, spacing } from '../constants/theme';
 import type { PickedImage } from '../utils/imageUpload';
 
-/** 결과 한 변(px). 아바타 최대 표시가 80pt 라 512 면 3배 화면에서도 충분하고, 원본을 그대로
- *  올릴 때보다 Cloudinary 저장 용량이 크게 준다(무료 티어 25GB — UploadController 주석). */
-const OUTPUT_SIZE = 512;
+/**
+ * 결과 한 변(px) 기본값 — 1024(2026-10-14, 예전 512). 프로필 시트(ProfileSheet)가 사진을 168pt·전체화면으로 크게 보여 주면서
+ * 512 는 3배 화면에서 물렀다(docs/photo-viewing-profile_2026-10-14.md §3). 그래도 원본을 그대로 올리는 것보다는 훨씬 작다.
+ * 우리 이모지 얼굴처럼 AI 에 넘기는 자리는 {@link Props.outputSize} 로 512 를 유지한다 — 입력이 커지면 비용만 는다.
+ */
+const DEFAULT_OUTPUT_SIZE = 1024;
 /** 확대 상한. 넘기면 원본 픽셀보다 크게 늘려 결과가 뭉개진다 */
 const MAX_SCALE = 4;
 /** 버튼 한 번에 확대/축소되는 비율 — 웹(마우스)엔 핀치가 없어 이 경로가 유일한 확대 수단이다 */
@@ -60,6 +63,8 @@ interface Props {
   onConfirm: (uri: string) => void;
   /** 머리 제목 — 우리 이모지처럼 프로필이 아닌 곳에서 쓸 때 바꾼다 */
   title?: string;
+  /** 결과 한 변(px). 기본 1024 — AI 에 넘기는 자리(우리 이모지 얼굴)는 512 */
+  outputSize?: number;
 }
 
 interface Transform {
@@ -70,7 +75,13 @@ interface Transform {
 
 const IDENTITY: Transform = { scale: 1, x: 0, y: 0 };
 
-export function AvatarCropSheet({ source, onCancel, onConfirm, title = '프로필 사진' }: Props) {
+export function AvatarCropSheet({
+  source,
+  onCancel,
+  onConfirm,
+  title = '프로필 사진',
+  outputSize = DEFAULT_OUTPUT_SIZE,
+}: Props) {
   const insets = useSafeAreaInsets();
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
   const [working, setWorking] = useState(false);
@@ -195,7 +206,7 @@ export function AvatarCropSheet({ source, onCancel, onConfirm, title = '프로�
         height: side,
       });
       // 원본이 결과보다 작으면 늘리지 않는다 — 없는 화소를 만들어 봐야 뭉개지기만 한다
-      if (side > OUTPUT_SIZE) context.resize({ width: OUTPUT_SIZE, height: OUTPUT_SIZE });
+      if (side > outputSize) context.resize({ width: outputSize, height: outputSize });
 
       const rendered = await context.renderAsync();
       const result = await rendered.saveAsync({ compress: 0.85, format: SaveFormat.JPEG });

@@ -707,6 +707,8 @@ export function CoupleEmojiCreateScreen({ navigation }: Props) {
       {/* 정사각 512 JPEG 로 잘라 넘긴다 — 업로드는 확정 후 한 번뿐(AvatarCropSheet 주석) */}
       <AvatarCropSheet
         title="얼굴 맞추기"
+        // AI 입력이라 512 유지 — 크면 비용만 는다(AvatarCropSheet DEFAULT_OUTPUT_SIZE 주석)
+        outputSize={512}
         source={picked}
         onCancel={() => setPicked(null)}
         onConfirm={(uri) => {
