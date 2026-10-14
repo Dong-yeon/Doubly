@@ -6,6 +6,7 @@ import com.fitto.chat.dto.SendMessageRequest;
 import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
+import com.fitto.game.service.OmokService;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -38,6 +39,7 @@ class RestoreRecordsFlowTest {
     @Autowired RelationService relationService;
     @Autowired PlaceService placeService;
     @Autowired ChatService chatService;
+    @Autowired OmokService omokService;
 
     @PersistenceContext EntityManager em;
 
@@ -291,6 +293,109 @@ class RestoreRecordsFlowTest {
 
         assertThat(count("scheduled_chat_messages", "relation_id", newRelationId)).isZero();
         assertThat(count("scheduled_chat_messages", "relation_id", oldRelationId)).isZero();
+    }
+
+    /**
+     * 커플 게임(V86)도 relations FK(ON DELETE 없음)를 가진다 — 안 옮기면 옛 관계 삭제가 FK 위반으로 실패해
+     * 게임을 한 판이라도 연 커플은 복원이 500 이었다(2026-10-14).
+     * 옛 관계에서 진행 중이던 판은 접혀서 따라온다 — 새 관계의 진행 중인 판이 그대로 "지금 판"이어야 한다.
+     */
+    @Test
+    @Transactional
+    void 커플_게임도_복원되고_옛_진행_중인_판은_접힌다() {
+        Long me = register("restore-game-a@fitto.com");
+        Long partner = register("restore-game-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+
+        Long givenUp = omokService.start(me).id();
+        omokService.giveUp(me, givenUp);
+        Long oldRunning = omokService.start(me).id();
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        Long newRunning = omokService.start(partner).id();
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        RestoreRecordsResponse result = relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
+        assertThat(count("relations", "id", oldRelationId)).isZero();
+        assertThat(count("couple_games", "couple_id", newRelationId)).isEqualTo(3);
+        assertThat(gameStatus(givenUp)).isEqualTo("ABANDONED");
+        assertThat(gameStatus(oldRunning)).isEqualTo("ABANDONED");
+        assertThat(gameStatus(newRunning)).isEqualTo("IN_PROGRESS");
+        assertThat(omokService.current(me).id()).isEqualTo(newRunning);
+    }
+
+    /**
+     * relations FK(ON DELETE 없음)를 가진 나머지 테이블 — 하나라도 남으면 옛 관계 삭제가 실패한다(2026-10-14).
+     * 아직 안 들은 운동 부스터는 들은 것으로 바꿔 옮긴다 — 헤어지기 전 녹음이 재회 뒤 운동 시작에 갑자기 재생되면 안 된다.
+     */
+    @Test
+    @Transactional
+    void 관계_FK_를_가진_나머지_기록도_복원된다() {
+        Long me = register("restore-rest-a@fitto.com");
+        Long partner = register("restore-rest-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+
+        exec("insert into contents (couple_id, title, type, added_by) values (:rid, '영화', 'MOVIE', :me)",
+                oldRelationId, me, partner);
+        exec("insert into call_sessions (couple_id, caller_id, callee_id, call_type, status, provider_call_id) "
+                + "values (:rid, :me, :partner, 'VOICE', 'ENDED', 'call-1')", oldRelationId, me, partner);
+        exec("insert into meal_nudges (relation_id, sender_id, receiver_id, nudge_date) "
+                + "values (:rid, :me, :partner, DATE '2026-01-01')", oldRelationId, me, partner);
+        exec("insert into workout_boosters (relation_id, sender_id, receiver_id, audio_url) "
+                + "values (:rid, :me, :partner, 'https://res.cloudinary.com/demo/video/upload/b.m4a')",
+                oldRelationId, me, partner);
+        exec("insert into workout_routines (user_id, title) values (:me, '선물 루틴')", oldRelationId, me, partner);
+        Number routineId = (Number) em.createNativeQuery("select max(id) from workout_routines where user_id = :me")
+                .setParameter("me", me).getSingleResult();
+        em.createNativeQuery("insert into routine_gifts (relation_id, sender_id, receiver_id, snapshot_routine_id) "
+                        + "values (:rid, :me, :partner, :routine)")
+                .setParameter("rid", oldRelationId).setParameter("me", me).setParameter("partner", partner)
+                .setParameter("routine", routineId.longValue()).executeUpdate();
+        exec("insert into favorite_food_gifts (relation_id, sender_id, receiver_id, name) "
+                + "values (:rid, :me, :partner, '아침 세트')", oldRelationId, me, partner);
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        RestoreRecordsResponse result = relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
+        assertThat(count("relations", "id", oldRelationId)).isZero();
+        assertThat(count("contents", "couple_id", newRelationId)).isEqualTo(1);
+        assertThat(count("call_sessions", "couple_id", newRelationId)).isEqualTo(1);
+        assertThat(count("meal_nudges", "relation_id", newRelationId)).isEqualTo(1);
+        assertThat(count("workout_boosters", "relation_id", newRelationId)).isEqualTo(1);
+        assertThat(count("routine_gifts", "relation_id", newRelationId)).isEqualTo(1);
+        assertThat(count("favorite_food_gifts", "relation_id", newRelationId)).isEqualTo(1);
+        Number unplayed = (Number) em.createNativeQuery(
+                        "select count(*) from workout_boosters where relation_id = :rid and played_at is null")
+                .setParameter("rid", newRelationId).getSingleResult();
+        assertThat(unplayed.longValue()).isZero();
+    }
+
+    private void exec(String sql, Long relationId, Long me, Long partner) {
+        var q = em.createNativeQuery(sql);
+        if (sql.contains(":rid")) q.setParameter("rid", relationId);
+        if (sql.contains(":me")) q.setParameter("me", me);
+        if (sql.contains(":partner")) q.setParameter("partner", partner);
+        q.executeUpdate();
+    }
+
+    private String gameStatus(Long gameId) {
+        return (String) em.createNativeQuery("select status from couple_games where id = :id")
+                .setParameter("id", gameId).getSingleResult();
     }
 
     private long count(String table, String column, Long id) {
