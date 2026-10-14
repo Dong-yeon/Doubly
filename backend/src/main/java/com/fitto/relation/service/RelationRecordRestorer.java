@@ -1,9 +1,12 @@
 package com.fitto.relation.service;
 
+import com.fitto.place.service.PlaceService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * 지난 기록 불러오기 (REL-07) — {@link RelationRecordPurger} 의 반대편.
@@ -30,6 +33,7 @@ public class RelationRecordRestorer {
     @Transactional
     public int restore(Long oldRelationId, Long newRelationId) {
         int moved = 0;
+        moved += mergeDuplicatePlaces(oldRelationId, newRelationId);
         moved += move("places", "couple_id", oldRelationId, newRelationId);
         moved += move("feed_posts", "couple_id", oldRelationId, newRelationId);
         moved += move("trips", "couple_id", oldRelationId, newRelationId);
@@ -152,6 +156,96 @@ public class RelationRecordRestorer {
         em.flush();
         em.clear();
         return moved;
+    }
+
+    /**
+     * 옛 관계와 새 관계에 같은 카카오 장소가 각각 있으면 새 관계의 행 하나로 합친다.
+     *
+     * <p>places 는 {@code UNIQUE (couple_id, kakao_place_id)}(V117)다. 재회 뒤 같은 가게를 다시 담고 복원하면
+     * 그냥 옮기는 update 가 이 제약을 위반해 복원 전체가 500 으로 되돌아갔다(2026-10-15).
+     *
+     * <p><b>왜 새 관계 쪽 행을 남기는가</b>: 재회 뒤 앱이 이미 그 id 로 카드·푸시 링크·여행 일정을 만들었다.
+     * 옛 id 는 어차피 지금 화면 어디에도 보이지 않는다. 대신 옛 행에 매달린 것은 전부 새 행으로 옮겨 잃지 않는다.
+     * <ul>
+     *   <li>방문(place_visits)·메뉴판 사진·관람 장소(content_logs)·여행 일정(trip_items)·채팅 카드(chat_messages)
+     *       — 행마다 독립된 기록이라 그대로 옮긴다. 방문 id 는 바뀌지 않으므로 방문에 단 피드 반응
+     *       (feed_reactions, PLACE_VISIT)도 따라온다. place_visits 의 UNIQUE 는 meal_id·(visited_by, client_request_id)라
+     *       장소와 무관해 겹치지 않는다.</li>
+     *   <li>대표 평점(place_ratings) — UNIQUE (place_id, user_id). 사람마다 하나뿐이라 겹치면 <b>새 관계 쪽이 이긴다</b>
+     *       (daily_answers·공지 고정과 같은 규칙: 재회 뒤에 남긴 것이 지금의 생각이다). 새 쪽에 없는 사람의 평점만 옮긴다.</li>
+     *   <li>메뉴(place_menu_items) — 저장이 "통째로 바꾸기"(PUT)라 한 장소의 메뉴는 목록 하나다. 둘을 이어 붙이면 같은
+     *       메뉴가 두 번 나온다. 새 쪽에 목록이 있으면 그것이 최신이라 옛 목록은 버리고, 없을 때만 옮긴다.
+     *       메뉴 행에는 파일이 없어 버려도 고아가 생기지 않는다.</li>
+     *   <li>여행 소속(places.trip_id) — 여행도 함께 옮겨지므로 새 행이 비어 있을 때만 옛 값을 잇는다.</li>
+     *   <li>등급 — 합친 평점으로 {@link PlaceService#computeTier} 를 다시 매긴다. 등극 시각은 "0→양수로 처음 등극한
+     *       시각"이라 두 행 중 이른 값을 남긴다. 복원은 사용자가 평가한 순간이 아니므로 등극 카드·푸시는 남기지 않는다.</li>
+     * </ul>
+     *
+     * @return 합쳐진(옛 관계에서 사라진) 장소 수 — 사용자에게는 옮겨진 것과 같다
+     */
+    private int mergeDuplicatePlaces(Long oldRelationId, Long newRelationId) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> pairs = em.createNativeQuery("""
+                        select o.id, n.id from places o
+                        join places n on n.kakao_place_id = o.kakao_place_id
+                        where o.couple_id = :old and n.couple_id = :new and o.kakao_place_id is not null
+                        """)
+                .setParameter("old", oldRelationId).setParameter("new", newRelationId)
+                .getResultList();
+        for (Object[] pair : pairs) {
+            mergePlace(((Number) pair[0]).longValue(), ((Number) pair[1]).longValue());
+        }
+        return pairs.size();
+    }
+
+    private void mergePlace(Long fromPlaceId, Long toPlaceId) {
+        exec("""
+                delete from place_ratings
+                where place_id = :from
+                  and user_id in (select r.user_id from place_ratings r where r.place_id = :to)
+                """, fromPlaceId, toPlaceId);
+        exec("""
+                delete from place_menu_items
+                where place_id = :from
+                  and exists (select 1 from place_menu_items m where m.place_id = :to)
+                """, fromPlaceId, toPlaceId);
+        for (String table : List.of("place_ratings", "place_menu_items", "place_visits", "place_menu_photos",
+                "content_logs", "trip_items", "chat_messages")) {
+            exec("update " + table + " set place_id = :to where place_id = :from", fromPlaceId, toPlaceId);
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Number> ratings = em.createNativeQuery("select rating from place_ratings where place_id = :to")
+                .setParameter("to", toPlaceId).getResultList();
+        int tier = ratings.size() == 2
+                ? PlaceService.computeTier(ratings.get(0).intValue(), ratings.get(1).intValue())
+                : 0;
+        if (tier == 0) {
+            exec("""
+                    update places set lovelichelin_tier = 0, lovelichelin_certified_at = null,
+                      trip_id = coalesce(trip_id, (select o.trip_id from places o where o.id = :from))
+                    where id = :to
+                    """, fromPlaceId, toPlaceId);
+        } else {
+            em.createNativeQuery("""
+                            update places set lovelichelin_tier = :tier,
+                              lovelichelin_certified_at = coalesce(
+                                (select min(p.lovelichelin_certified_at) from places p where p.id in (:from, :to)),
+                                current_timestamp),
+                              trip_id = coalesce(trip_id, (select o.trip_id from places o where o.id = :from))
+                            where id = :to
+                            """)
+                    .setParameter("tier", tier).setParameter("from", fromPlaceId).setParameter("to", toPlaceId)
+                    .executeUpdate();
+        }
+        exec("delete from places where id = :from", fromPlaceId, toPlaceId);
+    }
+
+    private void exec(String sql, Long fromPlaceId, Long toPlaceId) {
+        var q = em.createNativeQuery(sql);
+        if (sql.contains(":from")) q.setParameter("from", fromPlaceId);
+        if (sql.contains(":to")) q.setParameter("to", toPlaceId);
+        q.executeUpdate();
     }
 
     private int move(String table, String column, Long oldRelationId, Long newRelationId) {
