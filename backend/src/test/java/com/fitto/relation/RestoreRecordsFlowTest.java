@@ -7,6 +7,9 @@ import com.fitto.chat.service.ChatService;
 import com.fitto.common.exception.BusinessException;
 import com.fitto.common.exception.ErrorCode;
 import com.fitto.game.service.OmokService;
+import com.fitto.place.dto.PlaceResponse;
+import com.fitto.place.dto.RatePlaceRequest;
+import com.fitto.place.dto.RecordVisitRequest;
 import com.fitto.place.dto.SavePlaceRequest;
 import com.fitto.place.service.PlaceService;
 import com.fitto.relation.dto.InviteCodeResponse;
@@ -383,6 +386,122 @@ class RestoreRecordsFlowTest {
                         "select count(*) from workout_boosters where relation_id = :rid and played_at is null")
                 .setParameter("rid", newRelationId).getSingleResult();
         assertThat(unplayed.longValue()).isZero();
+    }
+
+    /**
+     * 같은 카카오 장소를 옛 관계·새 관계에서 각각 담았으면 places 의 UNIQUE (couple_id, kakao_place_id)(V117) 때문에
+     * 그냥 옮기면 제약 위반으로 복원 전체가 되돌아갔다. 새 관계의 행 하나로 합쳐야 한다 —
+     * 방문·메뉴판 사진·채팅 카드는 따라오고, 대표 평점은 사람마다 새 관계 쪽이 이기며, 등급은 합친 평점으로 다시 매겨진다.
+     */
+    @Test
+    @Transactional
+    void 같은_카카오_장소를_옛_관계와_새_관계에_담았으면_하나로_합친다() {
+        Long me = register("restore-dup-place-a@fitto.com");
+        Long partner = register("restore-dup-place-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+
+        Long oldPlace = placeService.save(me, kakaoPlace()).id();
+        placeService.rate(me, oldPlace, new RatePlaceRequest(5, null));
+        placeService.rate(partner, oldPlace, new RatePlaceRequest(3, null));
+        Long oldVisit = placeService.recordVisit(me, oldPlace,
+                new RecordVisitRequest(LocalDate.of(2025, 5, 1), 5, "첫 방문", null, null)).id();
+        em.createNativeQuery("insert into place_menu_photos (place_id, image_url, uploaded_by) "
+                        + "values (:pid, 'https://res.cloudinary.com/demo/image/upload/menu.jpg', :me)")
+                .setParameter("pid", oldPlace).setParameter("me", me).executeUpdate();
+        em.flush();
+        long oldCards = count("chat_messages", "place_id", oldPlace);
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        Long newPlace = placeService.save(me, kakaoPlace()).id();
+        placeService.rate(me, newPlace, new RatePlaceRequest(4, null));
+        placeService.recordVisit(me, newPlace,
+                new RecordVisitRequest(LocalDate.of(2026, 10, 1), 4, "다시 왔다", null, null));
+        em.flush();
+        em.clear();
+        assertThat(newPlace).isNotEqualTo(oldPlace);
+
+        relationService.requestRestore(me);
+        RestoreRecordsResponse result = relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
+        assertThat(count("relations", "id", oldRelationId)).isZero();
+        assertThat(count("places", "id", oldPlace)).isZero();
+        assertThat(placeCount(newRelationId)).isEqualTo(1);
+
+        assertThat(count("place_visits", "place_id", newPlace)).isEqualTo(2);
+        assertThat(count("place_visits", "id", oldVisit)).isEqualTo(1);
+        assertThat(count("place_menu_photos", "place_id", newPlace)).isEqualTo(1);
+        assertThat(count("chat_messages", "place_id", newPlace)).isGreaterThanOrEqualTo(oldCards + 1);
+
+        // 나는 새 관계의 4점이 이기고, 상대는 옛 관계의 3점이 따라온다 → (4+3)/2 = 3.5 → 1스타
+        PlaceResponse merged = placeService.get(me, newPlace);
+        assertThat(merged.myRating()).isEqualTo(4);
+        assertThat(merged.partnerRating()).isEqualTo(3);
+        assertThat(merged.lovelichelinTier()).isEqualTo(1);
+        assertThat(merged.lovelichelinCertifiedAt()).isNotNull();
+    }
+
+    /**
+     * 합칠 때 겹치는 쪽 — 둘 다 새 관계에서 다시 평가했으면 옛 평점은 모두 버려지고(등극 시각은 이른 쪽),
+     * 메뉴 목록은 "통째로 바꾸기"라 새 목록만 남는다. 카카오 id 없는 직접 입력 장소는 이름이 같아도 합치지 않는다.
+     */
+    @Test
+    @Transactional
+    void 합칠_때_평점과_메뉴는_새_관계_쪽이_이긴다() {
+        Long me = register("restore-dup-win-a@fitto.com");
+        Long partner = register("restore-dup-win-b@fitto.com");
+        Long oldRelationId = connect(me, partner);
+
+        Long oldPlace = placeService.save(me, kakaoPlace()).id();
+        placeService.rate(me, oldPlace, new RatePlaceRequest(5, null));
+        placeService.rate(partner, oldPlace, new RatePlaceRequest(5, null));
+        insertMenu(oldPlace, me, "옛 메뉴");
+        addPlace(me, "직접 입력한 집");
+        em.flush();
+        Object oldCertifiedAt = em.createNativeQuery("select lovelichelin_certified_at from places where id = :id")
+                .setParameter("id", oldPlace).getSingleResult();
+        assertThat(oldCertifiedAt).isNotNull();
+
+        relationService.endRelation(me, oldRelationId);
+        Long newRelationId = connect(me, partner);
+        Long newPlace = placeService.save(partner, kakaoPlace()).id();
+        placeService.rate(me, newPlace, new RatePlaceRequest(4, null));
+        placeService.rate(partner, newPlace, new RatePlaceRequest(4, null));
+        insertMenu(newPlace, partner, "새 메뉴");
+        addPlace(me, "직접 입력한 집");
+        em.flush();
+        em.clear();
+
+        relationService.requestRestore(me);
+        RestoreRecordsResponse result = relationService.requestRestore(partner);
+        em.flush();
+        em.clear();
+
+        assertThat(result.status()).isEqualTo(RestoreRecordsResponse.Status.RESTORED);
+        assertThat(placeCount(newRelationId)).isEqualTo(3);
+        assertThat(count("place_ratings", "place_id", newPlace)).isEqualTo(2);
+        PlaceResponse merged = placeService.get(me, newPlace);
+        assertThat(merged.myRating()).isEqualTo(4);
+        assertThat(merged.partnerRating()).isEqualTo(4);
+        assertThat(merged.lovelichelinTier()).isEqualTo(2);
+        assertThat(merged.lovelichelinCertifiedAt().toString())
+                .startsWith(oldCertifiedAt.toString().replace(' ', 'T').substring(0, 19));
+        assertThat(em.createNativeQuery("select name from place_menu_items where place_id = :id")
+                .setParameter("id", newPlace).getResultList()).containsExactly("새 메뉴");
+    }
+
+    private void insertMenu(Long placeId, Long userId, String name) {
+        em.createNativeQuery("insert into place_menu_items (place_id, name, updated_by) values (:pid, :name, :uid)")
+                .setParameter("pid", placeId).setParameter("name", name).setParameter("uid", userId)
+                .executeUpdate();
+    }
+
+    private static SavePlaceRequest kakaoPlace() {
+        return new SavePlaceRequest("성수 파스타", "서울 성동구", new BigDecimal("37.54"), new BigDecimal("127.05"),
+                "FOOD", "kakao-12345");
     }
 
     private void exec(String sql, Long relationId, Long me, Long partner) {

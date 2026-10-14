@@ -621,7 +621,7 @@ public class PlaceService {
      * 럽슐랭 등급 산정 — 둘 다 평가해야 하고, 한쪽이라도 2점 이하면 탈락(0)이다.
      * 남은 조합은 두 점수 모두 3점 이상이라 평균이 항상 3.0 이상이다.
      */
-    static int computeTier(Integer my, Integer partner) {
+    public static int computeTier(Integer my, Integer partner) {
         if (my == null || partner == null) {
             return 0;
         }
