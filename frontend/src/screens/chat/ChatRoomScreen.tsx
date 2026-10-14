@@ -120,7 +120,8 @@ import { useCoupleEmojiStore } from '../../store/coupleEmojiStore';
 import { playTouchGesture } from '../../utils/haptics';
 import { messagePreview } from '../../utils/messagePreview';
 import { emojiOnlyCount } from '../../utils/emojiOnly';
-import { chatDateDividerLabel, isSameLocalDay, toDateString } from '../../utils/date';
+import { chatDateDividerLabel, daysSince, isSameLocalDay, toDateString } from '../../utils/date';
+import { ProfileSheet } from '../../components/ProfileSheet';
 import { buildChatTranscript, canExportTranscript, shareTranscript } from '../../utils/chatExport';
 import { STICKER_PURCHASE_ENABLED } from '../../constants/config';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
@@ -262,6 +263,13 @@ export function ChatRoomScreen({ navigation, route }: Props) {
   }, [couple, fetchRelations]);
   const partnerName = couple?.partner?.name ?? title;
   const partnerAvatarUrl = couple?.partner?.profileImageUrl;
+  /*
+   * 상대 프로필 시트 — 말풍선 옆 아바타·머리의 이름을 누르면 연다(카톡과 같은 자리). 상대 사진을 크게 볼 곳이
+   * 앱 어디에도 없었다(docs/photo-viewing-profile_2026-10-14.md §3).
+   */
+  const [profileOpen, setProfileOpen] = useState(false);
+  // 상태 세터는 그대로 안정적이라 따로 useCallback 으로 감싸지 않는다(머리 setOptions 효과의 의존성이 흔들리지 않게)
+  const openPartnerProfile = setProfileOpen;
   const messages = useChatStore((s) => s.messages[relationId] ?? EMPTY_MESSAGES);
   const loadingOlder = useChatStore((s) => s.loadingOlder[relationId] ?? false);
   const pinnedMessage = useChatStore((s) => s.pinnedMessages[relationId] ?? null);
@@ -1090,11 +1098,24 @@ export function ChatRoomScreen({ navigation, route }: Props) {
        * 파라미터가 있든 없든 항상 사람이 읽을 수 있는 제목이 나온다.
        */
       title: partnerName ?? '채팅',
+      // 이름을 누르면 상대 프로필 — title 은 그대로 두어 뒤로가기 라벨·접근성 제목으로 쓰인다
+      headerTitle: () => (
+        <Pressable
+          onPress={() => openPartnerProfile(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${partnerName ?? '상대'} 프로필 보기`}
+        >
+          <Text style={styles.headerTitleText} numberOfLines={1}>
+            {partnerName ?? '채팅'}
+          </Text>
+        </Pressable>
+      ),
       headerRight: () => headerActions,
       // iOS 26 유리 알약 없이 — headerOptions.tsx bareHeaderItems 참고
       unstable_headerRightItems: () => bareHeaderItems(headerActions),
     });
-  }, [navigation, partnerName]);
+  }, [navigation, partnerName, openPartnerProfile]);
 
   /*
    * 히스토리 로딩 상태 — openRoom 이 REST 로 첫 페이지를 받아오는 동안에는 messages 가
@@ -2082,7 +2103,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             {/* 삭제된 메시지는 그룹핑 대상이 아니라(항상 혼자) 아바타를 조건 없이 보여준다 */}
             {!mine ? (
               <View style={styles.avatarSlot}>
-                <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partnerFill} />
+                <Pressable onPress={() => openPartnerProfile(true)} hitSlop={6} accessibilityRole="imagebutton" accessibilityLabel={`${partnerName} 프로필 보기`}>
+                  <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partnerFill} />
+                </Pressable>
               </View>
             ) : null}
             <View style={[styles.bubble, styles.bubbleDeleted]}>
@@ -2154,7 +2177,9 @@ export function ChatRoomScreen({ navigation, route }: Props) {
         {!mine ? (
           <View style={styles.avatarSlot}>
             {isGroupEnd ? (
-              <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partnerFill} />
+              <Pressable onPress={() => openPartnerProfile(true)} hitSlop={6} accessibilityRole="imagebutton" accessibilityLabel={`${partnerName} 프로필 보기`}>
+                <Avatar name={partnerName} imageUrl={partnerAvatarUrl} size={26} color={colors.partnerFill} />
+              </Pressable>
             ) : null}
           </View>
         ) : null}
@@ -3020,6 +3045,21 @@ export function ChatRoomScreen({ navigation, route }: Props) {
       {/* 사진 전체화면 보기 */}
       <ImageViewer images={viewing.images} initialIndex={viewing.index} onClose={() => setViewingImage(null)} />
 
+      {/* 상대 프로필 — 말풍선 옆 아바타·머리 이름에서 연다 */}
+      <ProfileSheet
+        person={
+          profileOpen
+            ? { name: partnerName, imageUrl: partnerAvatarUrl, color: colors.partnerFill, mood: partnerMood }
+            : null
+        }
+        dday={couple?.anniversaryDate || couple?.connectedAt ? daysSince(couple?.anniversaryDate ?? couple?.connectedAt) : null}
+        onClose={() => setProfileOpen(false)}
+        onOpenRecords={() => {
+          setProfileOpen(false);
+          navigation.navigate('Album', { screen: 'FeedTimeline', params: { who: 'partner' }, initial: false });
+        }}
+      />
+
       {/* 사진 전송 미리보기 — 고른 즉시 보내지 않고 확인 후에만 업로드·전송한다 */}
       <Modal
         visible={pendingImages.length > 0}
@@ -3275,6 +3315,8 @@ const styles = themedStyles((colors) => ({
   flex: { flex: 1 },
   headerCallActions: { flexDirection: 'row', alignItems: 'center', paddingRight: spacing.xs },
   headerCallButton: { minWidth: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  // 머리 이름 — 누르면 상대 프로필. 기본 헤더 제목과 같은 크기·굵기
+  headerTitleText: { fontSize: fontSize.subtitle, fontWeight: '700', color: colors.textPrimary, maxWidth: 200 },
   headerCallButtonPressed: { opacity: 0.6 },
   /* 캐치마인드 그림 카드 — 누르면 게임으로 간다. 눌린 티를 내 버튼인 걸 알게 한다 */
   imagePressed: { opacity: 0.7 },

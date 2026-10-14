@@ -34,6 +34,7 @@ import { LockedCard } from '../../components/LockedCard';
 import { ServiceStatusBanner } from '../../components/ServiceStatusBanner';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
+import { ProfileSheet } from '../../components/ProfileSheet';
 import { PendingMealPhotoPeek } from './components/PendingMealPhotoPeek';
 import {
   CAN_KEEP_PENDING_MEAL_PHOTOS,
@@ -258,6 +259,8 @@ export function HomeScreen({ navigation }: Props) {
   const [soloMood, setSoloMood] = useState<string | null>(null);
   /* 오늘 식단 시트 — 히어로의 내 식단 칩에서 연다(아래 onPressToday 참고) */
   const [mealSheet, setMealSheet] = useState(false);
+  /** 프로필 시트 — 히어로에서 누른 사람. null 이면 닫힘 */
+  const [profileWho, setProfileWho] = useState<'me' | 'partner' | null>(null);
   const [mealSaving, setMealSaving] = useState(false);
   /* 설정이 생기기 전 세션(값 undefined)은 서버 기본값과 맞춰 켜진 것으로 본다 */
   const autoAnalyzeMealPhoto = user?.autoAnalyzeMealPhoto !== false;
@@ -1063,9 +1066,11 @@ export function HomeScreen({ navigation }: Props) {
                       });
                     }
                   }}
-                  onPressPerson={(who) =>
-                    navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false })
-                  }
+                  /*
+                   * 열을 누르면 프로필 시트(2026-10-14 사용자 결정) — 사진을 크게 보고, 예전에 곧장 가던 "○○님의 기록"은
+                   * 시트 안 버튼으로 옮겼다. 상대 사진을 크게 볼 자리가 앱 어디에도 없었다(docs/photo-viewing-profile_2026-10-14.md).
+                   */
+                  onPressPerson={(who) => setProfileWho(who)}
                   /*
                    * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
                    * FAB 를 없앤 대신 이 칩이 그 역할을 물려받았고, 아래 분기가 그 약속을 지킨다.
@@ -1312,6 +1317,34 @@ export function HomeScreen({ navigation }: Props) {
         onViewToday={() => {
           setMealSheet(false);
           navigation.navigate('Health', { screen: 'DietMain', pop: true });
+        }}
+      />
+      {/* 프로필 — 히어로의 열을 누르면(위 onPressPerson). 기록 보기는 시트 안 버튼으로 */}
+      <ProfileSheet
+        person={
+          profileWho === 'me'
+            ? {
+                name: user?.name ?? '나',
+                imageUrl: user?.profileImageUrl,
+                color: colors.meFill,
+                mood: mood?.mine ?? null,
+              }
+            : profileWho === 'partner'
+              ? {
+                  name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
+                  imageUrl: couple?.partner?.profileImageUrl,
+                  color: colors.partnerFill,
+                  mood: mood?.partner ?? null,
+                }
+              : null
+        }
+        dday={couple?.anniversaryDate || couple?.connectedAt ? dday : null}
+        recordsLabel={profileWho === 'me' ? '내 기록 보기' : undefined}
+        onClose={() => setProfileWho(null)}
+        onOpenRecords={() => {
+          const who = profileWho;
+          setProfileWho(null);
+          if (who) navigation.navigate('Album', { screen: 'FeedTimeline', params: { who }, initial: false });
         }}
       />
     </View>
