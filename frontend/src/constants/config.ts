@@ -252,6 +252,13 @@ export const EMOJI_SET_PRODUCT_ID = 'emoji_set_1';
 export const CURRENCY_PACK_PRODUCT_IDS = ['currency_39', 'currency_99', 'currency_299'];
 
 /**
+ * Dubly Plus 영구(비소모성, 19,000원) — 서버 `LifetimeProduct.PLUS_LIFETIME` 과 값이 같아야 한다(`StoreProductIdSyncTest`).
+ * 광고 제거, 커플 한 명이 사면 둘 다(docs/DUBLY_PLUS_PLAN_2026-10-14.md). 스토어에 없으면 결제 화면이 영구 카드를 그리지 않는다.
+ * 콘솔에 한 번 만든 id 는 바꿀 수 없다.
+ */
+export const PLUS_LIFETIME_PRODUCT_ID = 'plus_lifetime';
+
+/**
  * 결제할 기본 요금제(base plan)의 id — Play Console 의 "기본 요금제 및 혜택" 표에 보이는 ID.
  *
  * <p><b>왜 지정해야 하나</b>: 한 구독 상품 아래에 기본 요금제가 여러 개 달릴 수 있다

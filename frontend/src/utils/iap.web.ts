@@ -53,3 +53,12 @@ export async function fetchCurrencyPacks(): Promise<never[]> {
 export async function requestCurrencyPurchase(_userId: number, _productId: string): Promise<void> {
   throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
 }
+
+/* Dubly Plus 영구 — 웹에는 스토어가 없다(위와 같은 이유로 이름을 맞춰 둔다). */
+export async function fetchLifetimeProduct(): Promise<null> {
+  return null;
+}
+
+export async function requestLifetimePurchase(_userId: number): Promise<void> {
+  throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
+}

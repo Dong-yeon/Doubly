@@ -19,6 +19,7 @@ import { LevelCard } from '../../components/LevelCard';
 import { WeeklyRecapCard } from '../../components/WeeklyRecapCard';
 import { LockedCard } from '../../components/LockedCard';
 import { useAuthStore } from '../../store/authStore';
+import { usePlanStore } from '../../store/planStore';
 import { relationApi } from '../../api/relation';
 import { selectEndedCouples, useRelationStore } from '../../store/relationStore';
 import { streakApi } from '../../api/streak';
@@ -417,9 +418,20 @@ export function MyScreen({ navigation }: Props) {
    */
   const [withdrawing, setWithdrawing] = useState(false);
   const onWithdraw = () => {
+    /*
+     * 산 것에 대한 고지 — 영구권은 탈퇴하면 새 계정으로 옮겨지지 않고(스토어 귀속 id 가 계정마다 달라 복원이 거절된다,
+     * docs/DUBLY_PLUS_PLAN_2026-10-14.md D9), 자동 갱신 구독은 앱 탈퇴로 멈추지 않는다(해지는 스토어에서만 된다).
+     */
+    const { lifetimeOwned, adFreeSource } = usePlanStore.getState();
+    const purchaseNotice = lifetimeOwned
+      ? '\n\nDubly Plus 영구 이용권은 탈퇴하면 새 계정으로 옮겨지지 않아요.'
+      : adFreeSource === 'SELF_SUBSCRIPTION'
+        ? '\n\nDubly Plus 구독은 탈퇴해도 자동으로 해지되지 않아요. 스토어의 구독 관리에서 해지해 주세요.'
+        : '';
     Alert.alert(
       '회원 탈퇴',
-      '14일 뒤 계정과 개인 기록(운동·식단·체중)이 삭제되고, 연결된 관계도 해제돼요.\n커플 공동 기록(맛집·피드·여행·채팅)은 상대방 화면에서도 사라지며, 상대에게 탈퇴 사실이 알려져요.\n\n그 전에 다시 로그인하면 탈퇴가 취소돼요.\n기록을 남기고 싶다면 탈퇴 전에 먼저 받아 두세요 — 탈퇴하면 로그인하는 순간 취소되므로, 유예기간 중에는 받을 수 없어요.',
+      '14일 뒤 계정과 개인 기록(운동·식단·체중)이 삭제되고, 연결된 관계도 해제돼요.\n커플 공동 기록(맛집·피드·여행·채팅)은 상대방 화면에서도 사라지며, 상대에게 탈퇴 사실이 알려져요.\n\n그 전에 다시 로그인하면 탈퇴가 취소돼요.\n기록을 남기고 싶다면 탈퇴 전에 먼저 받아 두세요 — 탈퇴하면 로그인하는 순간 취소되므로, 유예기간 중에는 받을 수 없어요.' +
+        purchaseNotice,
       [
         { text: '취소', style: 'cancel' },
         { text: '기록 먼저 받기', onPress: () => navigation.navigate('RecordExport') },

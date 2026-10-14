@@ -77,6 +77,19 @@ class StoreProductIdSyncTest {
                         .map(com.fitto.common.currency.CurrencyPack::productId).toList());
     }
 
+    /**
+     * Dubly Plus 영구 — 어긋나면 앱이 판 상품을 서버가 "없는 상품"으로 거절한다. 비소모성이라 트랜잭션이 닫히지 않은 채
+     * 남고, 사용자는 결제했는데 광고가 그대로인 상태를 본다.
+     */
+    @Test
+    void 앱의_영구_상품_id_가_서버_LifetimeProduct_와_같다() throws IOException {
+        String lifetime = single(readConfigTs(), "export const PLUS_LIFETIME_PRODUCT_ID\\s*=\\s*'([a-z0-9_.]+)'");
+
+        assertThat(Arrays.stream(LifetimeProduct.values()).map(LifetimeProduct::productId))
+                .as("앱 PLUS_LIFETIME_PRODUCT_ID 가 서버 LifetimeProduct 에 없음")
+                .contains(lifetime);
+    }
+
     private String single(String source, String regex) {
         Matcher m = Pattern.compile(regex).matcher(source);
         assertThat(m.find()).as("config.ts 에서 찾지 못함: " + regex).isTrue();

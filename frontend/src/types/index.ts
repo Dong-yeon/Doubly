@@ -190,7 +190,16 @@ export interface PlanInfo {
    */
   trialEndsAt: string | null;
   features: FeatureState[];
+  /** 광고를 끌까 — 본인 또는 커플 상대가 Dubly Plus(구독·영구)를 가졌다. 체험은 아니다. 옛 서버는 보내지 않는다 */
+  adFree?: boolean;
+  /** 왜 광고가 없나 — 결제 화면이 "○○님 덕분에"를 고른다 */
+  adFreeSource?: AdFreeSource;
+  /** 본인이 영구권을 가졌나 — 상대 것은 세지 않는다 */
+  lifetimeOwned?: boolean;
 }
+
+/** 서버 `AdFreeResolver.Source` 와 같은 값 */
+export type AdFreeSource = 'SELF_LIFETIME' | 'SELF_SUBSCRIPTION' | 'PARTNER' | 'NONE';
 
 // 5.2 users
 export interface User {

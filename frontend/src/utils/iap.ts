@@ -46,6 +46,7 @@ import { storage } from './storage';
 import {
   CURRENCY_PACK_PRODUCT_IDS,
   EMOJI_SET_PRODUCT_ID,
+  PLUS_LIFETIME_PRODUCT_ID,
   PRO_BASE_PLAN_IDS,
   PRO_SUBSCRIPTION_SKUS,
   STORAGE_KEYS,
@@ -321,6 +322,38 @@ export async function requestCurrencyPurchase(userId: number, productId: string)
   });
 }
 
+/** Dubly Plus 영구(비소모성) 상품 — 가격 표시용. 스토어에 없으면 null(결제 화면이 영구 카드를 그리지 않는다). */
+export async function fetchLifetimeProduct(): Promise<Product | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const products = await fetchProducts({ skus: [PLUS_LIFETIME_PRODUCT_ID], type: 'in-app' });
+    const list = Array.isArray(products) ? (products as Product[]) : [];
+    return list.find((p) => p.id === PLUS_LIFETIME_PRODUCT_ID) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Dubly Plus 영구 결제창을 연다 — 결과는 {@link attachPurchaseListeners} 로 와 영구권 검증 경로를 탄다. */
+export async function requestLifetimePurchase(userId: number): Promise<void> {
+  if (Platform.OS === 'web') {
+    throw new Error('웹에서는 인앱결제를 지원하지 않아요.');
+  }
+  const product = await fetchLifetimeProduct();
+  if (!product) {
+    throw new Error('상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+  }
+  analyticsApi.log('PURCHASE_STARTED', PLUS_LIFETIME_PRODUCT_ID).catch(() => {});
+  beginPurchaseFlow();
+  await requestPurchase({
+    type: 'in-app',
+    request: {
+      google: { skus: [PLUS_LIFETIME_PRODUCT_ID], obfuscatedAccountId: String(userId) },
+      apple: { sku: PLUS_LIFETIME_PRODUCT_ID, appAccountToken: appAccountTokenOf(userId) },
+    },
+  });
+}
+
 /**
  * PRO 구독 결제창을 연다. 실제 결제 성공/실패는 {@link attachPurchaseListeners} 로 온다 —
  * 이 함수가 끝났다고 결제가 끝난 게 아니다(결제창을 여는 요청을 보냈을 뿐).
@@ -435,6 +468,48 @@ async function verifyCurrencyAndFinish(purchase: Purchase, trigger: Trigger): Pr
 }
 
 /**
+ * Dubly Plus 영구(비소모성) — 서버가 반영한 뒤에만 닫되 <b>소비하지 않는다</b>(isConsumable: false). 소비하면 Play 에서
+ * 다시 살 수 있게 되고 복원 목록에서 빠진다(크라운·세트와 반대).
+ *
+ * <p>비소모성은 {@code getAvailablePurchases()} 가 <b>앱을 켤 때마다</b> 돌려준다. 구독처럼 'done' 기록으로 한 번만
+ * 검증하고, 안드로이드는 스토어가 승인(acknowledge)을 알려주면 바로 건너뛴다. 복원은 사용자가 결과를 기다리므로 항상 검증한다.
+ */
+async function verifyLifetimeAndFinish(purchase: Purchase, trigger: Trigger): Promise<Outcome> {
+  const key = keyOf(purchase);
+  const handled = key ? await readHandled() : {};
+  if (trigger === 'launch' && key) {
+    if (handled[key] === 'done') return 'reflected';
+    if ('isAcknowledgedAndroid' in purchase && purchase.isAcknowledgedAndroid) {
+      await markHandled(key, 'done');
+      return 'reflected';
+    }
+  }
+  const receipt = Platform.OS === 'android' ? purchase.purchaseToken : purchase.id;
+  if (!receipt) return 'error';
+  try {
+    if (Platform.OS === 'android') {
+      await planApi.verifyGoogleLifetime(PLUS_LIFETIME_PRODUCT_ID, receipt);
+    } else {
+      await planApi.verifyAppleLifetime(PLUS_LIFETIME_PRODUCT_ID, receipt);
+    }
+  } catch (e) {
+    if (trigger !== 'launch') {
+      toast.error(e instanceof Error && e.message ? e.message : '구매를 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
+    }
+    return 'error';
+  }
+  try {
+    await finishTransaction({ purchase, isConsumable: false });
+  } catch {
+    // 이미 닫혔거나 스토어가 잠시 응답하지 않음 — 서버는 이미 반영했다
+  }
+  if (key) await markHandled(key, 'done');
+  await usePlanStore.getState().load();
+  if (trigger === 'purchase') toast.success('이제 광고 없이 써요 — 우리 둘 다!');
+  return 'reflected';
+}
+
+/**
  * 서버에 구매를 검증시키고, 반영된 뒤에만 스토어 트랜잭션을 닫는다.
  *
  * <p>실패를 셋으로 나눈다 — 예전엔 catch 하나가 전부 "반영이 늦어지고 있어요"였다.
@@ -452,6 +527,9 @@ async function verifyAndFinish(purchase: Purchase, trigger: Trigger): Promise<Ou
   }
   if (CURRENCY_PACK_PRODUCT_IDS.includes(purchase.productId)) {
     return verifyCurrencyAndFinish(purchase, trigger);
+  }
+  if (purchase.productId === PLUS_LIFETIME_PRODUCT_ID) {
+    return verifyLifetimeAndFinish(purchase, trigger);
   }
   const key = keyOf(purchase);
   const handled = key ? await readHandled() : {};
@@ -523,7 +601,7 @@ async function verifyAndFinish(purchase: Purchase, trigger: Trigger): Promise<Ou
   if (key) await markHandled(key, 'done');
   await usePlanStore.getState().load();
   if (trigger === 'purchase' || (trigger === 'launch' && firstTime)) {
-    toast.success('PRO가 시작됐어요!');
+    toast.success('Dubly Plus가 시작됐어요!');
   }
   return 'reflected';
 }

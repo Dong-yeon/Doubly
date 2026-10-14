@@ -35,4 +35,12 @@ export const planApi = {
     unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/credits/purchases/google', { productId, receipt: purchaseToken })),
   verifyAppleCredit: (productId: string, transactionId: string) =>
     unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/credits/purchases/apple', { productId, receipt: transactionId })),
+  /**
+   * Dubly Plus 영구(비소모성) 검증 — 결제 직후와 <b>구매 복원</b> 모두 이 호출이다. 이미 반영된 거래면 그대로 성공한다.
+   * 실패는 예외로 온다(다른 계정 결제 403 등). 광고 제거가 반영된 최신 플랜을 돌려준다.
+   */
+  verifyGoogleLifetime: (productId: string, purchaseToken: string) =>
+    unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/entitlements/purchases/google', { productId, receipt: purchaseToken })),
+  verifyAppleLifetime: (productId: string, transactionId: string) =>
+    unwrap(apiClient.post<ApiResponse<PlanInfo>>('/plan/entitlements/purchases/apple', { productId, receipt: transactionId })),
 };

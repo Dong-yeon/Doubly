@@ -25,6 +25,7 @@ import { connectSocket, subscribeCouple } from '../../api/chatSocket';
 import type { FeedItem } from '../../types';
 import { colors, spacing } from '../../constants/theme';
 import { themedStyles } from '../../theme/themedStyles';
+import { AdBanner } from '../../components/AdBanner';
 
 type Props = NativeStackScreenProps<AlbumStackParamList, 'FeedTimeline'>;
 
@@ -248,9 +249,16 @@ export function FeedTimelineScreen({ navigation, route }: Props) {
         onRefresh={load}
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           // FeedCard 자체엔 dimmed prop 이 없어(패턴 7 대상 밖) View 로 감싸 흐리게 처리
           <View style={item.type === 'POST' && deletingId === item.refId ? styles.cardDeleting : undefined}>
+            {/*
+              배너는 세 번째 기록 위에 한 번만 — 목록 맨 위는 "우리 기록"의 얼굴이라 비우고, 줄마다 끼우지 않는다.
+              Dubly Plus(본인·상대)면 아무것도 그리지 않는다. 결제 화면은 홈 스택에 있다.
+            */}
+            {index === 2 ? (
+              <AdBanner onRemoveAds={() => navigation.getParent()?.navigate('Home', { screen: 'Plan' })} />
+            ) : null}
             <FeedCard
               item={item}
               timeLabel={feedTimeLabel(item.occurredAt)}

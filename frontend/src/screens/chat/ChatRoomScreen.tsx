@@ -1115,6 +1115,8 @@ export function ChatRoomScreen({ navigation, route }: Props) {
             if (type === 'MOOD') void refreshPartnerMoodRef.current(true);
             // 상대가 (채팅 링크 칩 등으로) 럽슐랭에 장소를 담았다 — 다음에 럽슐랭 탭을 열면 다시 받는다
             if (type === 'PLACE') usePlaceStore.getState().invalidate();
+            // 상대가 Dubly Plus 를 샀다(또는 환불) — 다른 탭의 배너가 바로 따라가게 플랜만 다시 읽는다
+            if (type === 'PLAN') void usePlanStore.getState().load();
           });
         })
         .catch(() => undefined);

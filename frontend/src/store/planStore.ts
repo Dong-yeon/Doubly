@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import { planApi } from '../api/plan';
 import { setPlanGateHandler, type PlanGateInfo } from '../api/client';
-import type { FeatureKey, FeatureState, Plan, PlanInfo } from '../types';
+import type { AdFreeSource, FeatureKey, FeatureState, Plan, PlanInfo } from '../types';
 
 interface PlanState {
   /** 개인 등급 — 개인 기능(AI 음식 분석·심화 통계 등)의 기준 */
@@ -23,6 +23,14 @@ interface PlanState {
   /** 체험 종료 시각(ISO). 끝이 정해져 있지 않으면 null */
   trialEndsAt: string | null;
   features: Partial<Record<FeatureKey, FeatureState>>;
+  /**
+   * 광고를 끌까 — 본인 또는 상대가 Dubly Plus 를 가졌다. <b>기본값은 true(광고 없음)</b>다: 로드 전·조회 실패에
+   * 광고를 띄우면 결제한 사람에게 한 프레임이라도 광고가 스친다. 광고는 서버가 "아니다"라고 답한 뒤에만 뜬다.
+   */
+  adFree: boolean;
+  adFreeSource: AdFreeSource;
+  /** 본인이 영구권을 가졌나 */
+  lifetimeOwned: boolean;
   isLoaded: boolean;
   /** 한도에 걸린 직후의 안내 — 업그레이드 시트를 띄우고 dismissGate 로 닫는다 */
   gate: PlanGateInfo | null;
@@ -60,6 +68,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   freeTrial: false,
   trialEndsAt: null,
   features: {},
+  adFree: true,
+  adFreeSource: 'NONE',
+  lifetimeOwned: false,
   isLoaded: false,
   gate: null,
 
@@ -73,6 +84,10 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         freeTrial: info.freeTrial,
         trialEndsAt: info.trialEndsAt ?? null,
         features: indexByFeature(info),
+        // 옛 서버(필드 없음)면 광고를 띄우지 않는다 — 판정 근거 없이 결제한 사람에게 광고를 보일 수는 없다
+        adFree: info.adFree ?? true,
+        adFreeSource: info.adFreeSource ?? 'NONE',
+        lifetimeOwned: info.lifetimeOwned ?? false,
         isLoaded: true,
       });
     } catch {

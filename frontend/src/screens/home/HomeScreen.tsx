@@ -31,6 +31,7 @@ import { MemoryPeek, hasMemories } from './components/MemoryPeek';
 import { TripPeek, isTripLive, isTripOngoing, pickHomeTrip } from './components/TripPeek';
 import { EventPeek, isEventToday, pickHomeEvent } from './components/EventPeek';
 import { LockedCard } from '../../components/LockedCard';
+import { AdBanner } from '../../components/AdBanner';
 import { ServiceStatusBanner } from '../../components/ServiceStatusBanner';
 import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
@@ -673,6 +674,8 @@ export function HomeScreen({ navigation }: Props) {
             if (type === 'COUPLE_EMOJI') void useCoupleEmojiStore.getState().load(true).catch(() => undefined);
             // 상대가 럽슐랭에 장소를 담았다 — 목록 캐시만 비운다(다음에 럽슐랭 탭이 다시 받는다)
             if (type === 'PLACE') usePlaceStore.getState().invalidate();
+            // 상대가 Dubly Plus 를 샀다(또는 환불) — 내 광고도 바로 따라간다
+            if (type === 'PLAN') void usePlanStore.getState().load();
           });
         })
         .catch(() => undefined);
@@ -1197,6 +1200,8 @@ export function HomeScreen({ navigation }: Props) {
                   },
                 ]}
               />
+              {/* 배너 — Dubly Plus(본인·상대)면 아무것도 그리지 않는다. 홈은 스크롤이 없어 칸 줄 아래 한 줄만 쓴다 */}
+              <AdBanner onRemoveAds={() => navigation.navigate('Plan')} />
               </View>
             </View>
           ) : !relationLoaded ? (
