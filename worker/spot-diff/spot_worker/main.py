@@ -9,14 +9,13 @@
 """
 import argparse
 import logging
-import os
 import sys
 import time
 
 import psycopg
 
 from . import config, fetch, jobs, pipeline
-from .storage import R2Uploader
+from .storage import R2Uploader, require
 
 log = logging.getLogger("spot_worker")
 
@@ -68,7 +67,7 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s", stream=sys.stdout)
 
     uploader = R2Uploader()
-    with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
+    with psycopg.connect(require("DATABASE_URL"), autocommit=True) as conn:
         while True:
             n = run_once(conn, uploader)
             log.info("작업 %d건 처리", n)
