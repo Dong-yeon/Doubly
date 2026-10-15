@@ -63,6 +63,7 @@ import {
 import { MapSheet, sheetTops, type SheetSnap } from './MapSheet';
 import { PlaceListCard, hasNoLocation, ratingHint } from './PlaceListCard';
 import { getMyLocation } from '../../utils/myLocation';
+import { kakaoSearchUrl, openInAppBrowser } from '../../utils/placeLinks';
 import { PlacePinCard } from './PlacePinCard';
 import { PlaceSearchResultCard, searchResultKey } from './PlaceSearchResultCard';
 import { errorCodeOf } from '../../api/client';
@@ -77,7 +78,12 @@ import { useDeleteAction } from '../../hooks/useDeleteAction';
 import { isKakaoMapConfigured } from '../../constants/config';
 import { toast } from '../../store/toastStore';
 import { haptics } from '../../utils/haptics';
-import { buildPlacePinIcons, type KakaoLatLng, type KakaoMapMarker } from '../../utils/kakaoMapHtml';
+import {
+  buildPlacePinIcons,
+  EXPLORE_PIN_COLORS,
+  type KakaoLatLng,
+  type KakaoMapMarker,
+} from '../../utils/kakaoMapHtml';
 import { colors, fontSize, radius, spacing } from '../../constants/theme';
 import { palettes } from '../../theme/palette';
 import type {
@@ -133,11 +139,29 @@ function isPlanError(e: unknown): boolean {
  * 지도 위 검색(서버 GET /places/search — 카카오 로컬 REST). WebView SDK 의 keywordSearch 는 쓰지 않는다:
  * 카카오 장소 id 를 버려 같은 곳이 두 번 담기곤 했다(docs/LOVELICHELIN_CHAT_LINK_2026-10-02.md).
  */
-type PlaceSearch =
+type PlaceSearch = (
   | { query: string; status: 'loading' }
   | { query: string; status: 'error'; message: string }
   | { query: string; status: 'unavailable' }
-  | { query: string; status: 'done'; results: PlaceSearchResult[] };
+  | { query: string; status: 'done'; results: PlaceSearchResult[] }
+) & {
+  /** 둘러보기(지도 범위의 업종 검색)면 그 종류 — 이름 검색이면 없다. query 는 칩 이름("주변 맛집") */
+  explore?: ExploreKind;
+};
+
+/**
+ * 지도 둘러보기 — 우리가 안 담은 주변 맛집·카페·가볼 만한 곳을 지도 범위로 찾아 핀으로 깐다(네이버 지도의 업종 칩).
+ * 결과는 이름 검색 결과와 같은 임시 핀·카드·[럽슐랭에 담기]를 쓴다(서버 GET /places/nearby).
+ * 칩 아이콘은 이모지다 — 커피잔 같은 새 MDI 글리프는 아이콘 폰트(fingerprint 입력)를 바꿔 OTA 를 막는다.
+ */
+type ExploreKind = keyof typeof EXPLORE_PIN_COLORS;
+const EXPLORE_KINDS: { kind: ExploreKind; api: 'FOOD' | 'CAFE' | 'SPOT'; chip: string; title: string }[] = [
+  { kind: 'food', api: 'FOOD', chip: '🍽️ 맛집', title: '주변 맛집' },
+  { kind: 'cafe', api: 'CAFE', chip: '☕ 카페', title: '주변 카페' },
+  { kind: 'spot', api: 'SPOT', chip: '📍 가볼 만한 곳', title: '가볼 만한 곳' },
+];
+/** 둘러보기 범위 한 변의 상한(도, 약 30km) — 서버 PlaceService.NEARBY_MAX_SPAN_DEG 와 같다. 넓으면 "주변"이 아니다 */
+const EXPLORE_MAX_SPAN_DEG = 0.3;
 
 type MapBounds = { sw: KakaoLatLng; ne: KakaoLatLng };
 const inBounds = (b: MapBounds, lat: number, lng: number) =>
@@ -200,6 +224,8 @@ export function PlaceScreen() {
    */
   const [movedBounds, setMovedBounds] = useState<MapBounds | null>(null);
   const [areaBounds, setAreaBounds] = useState<MapBounds | null>(null);
+  // 지금 보이는 범위 — 앱이 옮긴 시야도 포함(둘러보기 칩은 사용자가 지도를 안 만졌어도 지금 화면을 찾는다)
+  const viewBounds = useRef<MapBounds | null>(null);
   const [snap, setSnap] = useState<SheetSnap>('half');
   // 손잡이를 끌거나 누른 것도 "목록을 보겠다"다 — 키보드가 시트를 덮고 있으면 내린다.
   // 고정 참조로 둔다 — MapSheet 의 끌기 제스처가 이 값에 묶여 있어 렌더마다 새로 만들어지지 않게
@@ -307,13 +333,23 @@ export function PlaceScreen() {
         selected: p.id === selectedPlace?.id,
       }));
     // 검색 결과 — 우리 핀과 다른 모양(물방울). 담으면 결과에서 빠지고 우리 핀으로 다시 그려진다
-    const resultPins = searchResults.flatMap((r, i) =>
+    const explore = search?.explore;
+    const resultPins: KakaoMapMarker[] = searchResults.flatMap((r, i) =>
       r.lat != null && r.lng != null
-        ? [{ id: resultPinId(i), lat: r.lat, lng: r.lng, title: r.name, icon: 'search', selected: i === selectedResult }]
+        ? [
+            explore
+              ? /*
+                 * 둘러보기 — 업종 색 작은 물방울. 이름표는 고른 곳만(45곳 이름이 우리 핀 이름을 덮는다), 묶기에서도 뺀다
+                 * (넣으면 개수가 21을 넘겨 우리 핀까지 묶음 속으로 사라진다). 우리 핀보다 <b>먼저</b> 그려 아래에 깔린다.
+                 */
+                { id: resultPinId(i), lat: r.lat, lng: r.lng, title: r.name, icon: `explore-${explore}`,
+                  selected: i === selectedResult, label: false, cluster: false }
+              : { id: resultPinId(i), lat: r.lat, lng: r.lng, title: r.name, icon: 'search', selected: i === selectedResult },
+          ]
         : [],
     );
-    return [...placePins, ...resultPins];
-  }, [sortedPlaces, selectedPlace, searchResults, selectedResult]);
+    return explore ? [...resultPins, ...placePins] : [...placePins, ...resultPins];
+  }, [sortedPlaces, selectedPlace, searchResults, selectedResult, search?.explore]);
 
   // ---- 시트 단 높이 ----
   const showSheetCard = selectedPlace != null || pendingPin != null || pickedResult != null;
@@ -494,6 +530,48 @@ export function PlaceScreen() {
     }
   };
 
+  /*
+   * 지도 둘러보기 — 지금 보이는 범위의 그 업종을 찾는다. 같은 칩을 다시 누르면 끈다(지도 앱의 업종 칩과 같다).
+   * 시트는 미리보기로 내린다 — 이름 검색과 달리 "목록"보다 "지도에 깔린 핀"을 보려는 것이다. 시야도 그대로 둔다
+   * (결과가 이미 화면 안이다). 우리가 이미 담은 곳은 뺀다 — 우리 핀이 그 자리에 이미 있다.
+   */
+  const runExplore = async (kind: ExploreKind, bounds?: MapBounds) => {
+    const meta = EXPLORE_KINDS.find((k) => k.kind === kind);
+    const b = bounds ?? viewBounds.current;
+    if (!meta) return;
+    if (!b) {
+      toast.info('지도를 불러온 뒤에 다시 눌러 주세요.');
+      return;
+    }
+    if (b.ne.lat - b.sw.lat > EXPLORE_MAX_SPAN_DEG || b.ne.lng - b.sw.lng > EXPLORE_MAX_SPAN_DEG) {
+      toast.info('지도를 조금 더 확대하면 이 근처를 찾아 드려요.');
+      return;
+    }
+    const seq = ++searchSeq.current;
+    Keyboard.dismiss();
+    clearSheetCard();
+    setMovedBounds(null); // 찾기 전에 끌었던 기록으로 "이 지역 다시 찾기"가 바로 뜨지 않게
+    setAreaBounds(null);
+    // 검색창 글자는 우리 장소를 거르는 데도 쓰인다 — 둘러보는 동안 우리 핀이 반쯤 사라져 있지 않게 비운다
+    setFilter((f) => (f.search ? { ...f, search: '' } : f));
+    setSearch({ query: meta.title, status: 'loading', explore: kind });
+    setSnap('peek');
+    try {
+      const res = await placeApi.nearby(meta.api, b);
+      if (seq !== searchSeq.current) return;
+      if (!res.available) {
+        setSearch({ query: meta.title, status: 'unavailable', explore: kind });
+        return;
+      }
+      const ours = new Set(allPlaces.map((p) => p.kakaoPlaceId).filter((id): id is string => !!id));
+      const results = res.places.filter((r) => !r.kakaoPlaceId || !ours.has(r.kakaoPlaceId));
+      setSearch({ query: meta.title, status: 'done', results, explore: kind });
+    } catch (e) {
+      if (seq !== searchSeq.current) return;
+      setSearch({ query: meta.title, status: 'error', message: getErrorMessage(e, '주변 장소를 찾지 못했어요.'), explore: kind });
+    }
+  };
+
   // 검색 취소 — 임시 핀은 결과에서 파생되므로 결과를 비우면 같이 사라진다
   const cancelSearch = () => {
     searchSeq.current += 1;
@@ -560,6 +638,22 @@ export function PlaceScreen() {
         contentContainerStyle={overMap ? styles.filterRowOverMap : styles.filterRow}
         keyboardShouldPersistTaps="handled"
       >
+        {/*
+          둘러보기 칩 — 지도에서만. 우리 장소를 거르는 칩들과 하는 일이 달라(지도에 새 곳을 깐다) 앞에 두고 세로줄로 나눈다.
+        */}
+        {overMap ? (
+          <>
+            {EXPLORE_KINDS.map((k) => (
+              <Chip
+                key={k.kind}
+                label={k.chip}
+                selected={search?.explore === k.kind}
+                onPress={() => (search?.explore === k.kind ? cancelSearch() : void runExplore(k.kind))}
+              />
+            ))}
+            <View style={styles.chipDivider} />
+          </>
+        ) : null}
         <Chip
           label="럽슐랭 인증"
           selected={filter.certifiedOnly}
@@ -668,7 +762,7 @@ export function PlaceScreen() {
     <View style={styles.sheetHeader}>
       <View style={styles.sheetTitleRow}>
         <Text style={styles.sheetTitle} numberOfLines={1}>
-          {pendingPin ? '여기에 장소 추가' : pickedResult ? '검색 결과' : '고른 장소'}
+          {pendingPin ? '여기에 장소 추가' : pickedResult ? (search?.explore ? search.query : '검색 결과') : '고른 장소'}
         </Text>
         <IconButton icon="close" label="목록으로 돌아가기" onPress={clearSheetCard} />
       </View>
@@ -677,7 +771,8 @@ export function PlaceScreen() {
     <View style={styles.sheetHeader}>
       <View style={styles.sheetTitleRow}>
         <Text style={styles.sheetTitle} numberOfLines={1}>
-          ‘{search.query}’ 검색{search.status === 'done' ? ` ${search.results.length}곳` : ''}
+          {search.explore ? search.query : `‘${search.query}’ 검색`}
+          {search.status === 'done' ? ` ${search.results.length}곳` : ''}
         </Text>
         {/*
           목록 내리기/올리기 — 검색하면 시트가 중간으로 올라와 결과 핀을 가린다. 끌기(손잡이)는 눈에 잘 안 띄고
@@ -688,7 +783,7 @@ export function PlaceScreen() {
           label={snap === 'peek' ? '검색 결과 목록 올리기' : '검색 결과 목록 내리기 — 지도 보기'}
           onPress={() => setSnap(snap === 'peek' ? 'half' : 'peek')}
         />
-        <IconButton icon="close" label="검색 취소" onPress={cancelSearch} />
+        <IconButton icon="close" label={search.explore ? `${search.query} 끄기` : '검색 취소'} onPress={cancelSearch} />
       </View>
     </View>
   ) : (
@@ -749,22 +844,41 @@ export function PlaceScreen() {
         result={pickedResult}
         saving={savingResultKey === searchResultKey(pickedResult)}
         onAdd={() => addResult(pickedResult)}
+        onInfo={
+          search?.explore
+            ? () =>
+                void openInAppBrowser(pickedResult.detailUrl ?? kakaoSearchUrl(pickedResult.name, pickedResult.address), {
+                  toolbar: colors.surface,
+                  controls: colors.primary,
+                })
+            : undefined
+        }
       />
     </View>
   ) : search ? (
     search.status === 'loading' ? (
       <View style={styles.searchState}>
         <ActivityIndicator color={colors.primary} />
-        <Text style={styles.searchStateText}>‘{search.query}’ 찾는 중…</Text>
+        <Text style={styles.searchStateText}>
+          {search.explore ? `이 근처 ${search.query} 찾는 중…` : `‘${search.query}’ 찾는 중…`}
+        </Text>
       </View>
     ) : search.status === 'error' ? (
-      <EmptyState icon="cloud-off-outline" title="검색하지 못했어요" description={search.message} error onRetry={runSearch} />
+      <EmptyState
+        icon="cloud-off-outline"
+        title={search.explore ? '주변 장소를 찾지 못했어요' : '검색하지 못했어요'}
+        description={search.message}
+        error
+        onRetry={search.explore ? () => void runExplore(search.explore as ExploreKind) : runSearch}
+      />
     ) : search.status === 'unavailable' ? (
       <EmptyState
         icon="map-marker-outline"
         title="지금은 새 장소 검색을 쓸 수 없어요"
         description="[직접 추가]로 이름만 넣어 담을 수 있어요."
       />
+    ) : search.explore && search.results.length === 0 ? (
+      <Text style={styles.sheetEmpty}>이 근처에서 더 찾지 못했어요. 지도를 옮기거나 넓혀서 다시 찾아보세요.</Text>
     ) : search.results.length === 0 ? (
       <View style={styles.searchState}>
         <Text style={styles.searchStateText}>‘{search.query}’에 맞는 곳을 찾지 못했어요.</Text>
@@ -843,6 +957,7 @@ export function PlaceScreen() {
         onFailed={() => setMapFailed(true)}
         // 사용자가 움직였을 때만 버튼을 띄운다 — 앱이 맞춘 시야(처음 맞추기·핀 고르기·검색 결과)는 아니다
         onBoundsChange={(b) => {
+          viewBounds.current = { sw: b.sw, ne: b.ne };
           if (b.byUser) {
             Keyboard.dismiss();
             setMovedBounds({ sw: b.sw, ne: b.ne });
@@ -898,6 +1013,18 @@ export function PlaceScreen() {
         >
           <MaterialCommunityIcons name="restart" size={16} color={colors.primary} />
           <Text style={styles.areaButtonText}>이 지역 장소 보기</Text>
+        </Pressable>
+      ) : null}
+      {/* 둘러보는 중 지도를 옮겼다 — 같은 자리에 "이 지역 다시 찾기"(지도 앱의 "현 지도에서 검색"). 저절로 다시 찾지 않는다 */}
+      {movedBounds && search?.explore ? (
+        <Pressable
+          style={[styles.areaButton, { top: overlayHeight + spacing.xs }]}
+          onPress={() => void runExplore(search.explore as ExploreKind, movedBounds)}
+          accessibilityRole="button"
+          accessibilityLabel={`이 지역에서 ${search.query} 다시 찾기`}
+        >
+          <MaterialCommunityIcons name="restart" size={16} color={colors.primary} />
+          <Text style={styles.areaButtonText}>이 지역 다시 찾기</Text>
         </Pressable>
       ) : null}
       <MapSheet
@@ -1154,6 +1281,8 @@ const styles = themedStyles((colors) => ({
     paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
   },
+  // 둘러보기 칩 | 우리 장소 거르기 칩 — 하는 일이 달라 나눈다
+  chipDivider: { width: 1, alignSelf: 'stretch', marginVertical: spacing.xs, backgroundColor: colors.border },
   unmapped: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
