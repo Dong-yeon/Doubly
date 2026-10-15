@@ -219,7 +219,9 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
     overlaysRef.current = [];
     labelsRef.current = [];
     clustererRef.current?.clear();
-    const clustering = (markers?.length ?? 0) >= CLUSTER_MIN_MARKERS && !!kakao.maps.MarkerClusterer;
+    // 묶지 않는 핀(cluster: false — 둘러보기)은 개수에도 안 센다(kakaoMapHtml 과 같다)
+    const clustering =
+      (markers ?? []).filter((m) => m.cluster !== false).length >= CLUSTER_MIN_MARKERS && !!kakao.maps.MarkerClusterer;
     clusteringRef.current = clustering;
     const clustered: any[] = [];
 
@@ -241,7 +243,8 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         marker.__fittoPin = true;
       } else {
         // 묶을 때는 지도에 직접 올리지 않고 clusterer 에 맡긴다
-        const markerOpts: any = { map: clustering ? null : map, position: pos, title: m.title };
+        const inCluster = clustering && m.cluster !== false;
+        const markerOpts: any = { map: inCluster ? null : map, position: pos, title: m.title };
         const key = pinIconKey(m, icons);
         const ic = key ? icons?.[key] : undefined;
         if (ic) {
@@ -254,7 +257,11 @@ export const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function Kakao
         if (m.selected) markerOpts.zIndex = 10;
         marker = new kakao.maps.Marker(markerOpts);
         kakao.maps.event.addListener(marker, 'click', () => cbRef.current.onMarkerPress?.(m.id));
-        if (clustering) clustered.push(marker);
+        if (inCluster) clustered.push(marker);
+      }
+      if (m.label === false && !m.selected) {
+        overlaysRef.current.push(marker);
+        return;
       }
       const label = new kakao.maps.CustomOverlay({
         map: null,

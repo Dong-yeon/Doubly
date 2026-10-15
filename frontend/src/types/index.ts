@@ -1153,6 +1153,8 @@ export interface Place {
   phone?: string | null;
   /** 카카오 상세 링크 — 서버가 카카오 id 로 만든다(PlaceLinks). 없으면 검색 링크로 대신 연다 */
   detailUrl?: string | null;
+  /** 카카오 장소 id — 지도 둘러보기가 이미 담은 곳을 결과에서 뺀다. 직접 추가했으면 없다(예전 서버도 없다) */
+  kakaoPlaceId?: string | null;
   /** 저장(POST /places) 응답에만 온다 — false 면 같은 커플에 이미 있던 장소를 돌려준 것(중복 방지) */
   created?: boolean;
 }
