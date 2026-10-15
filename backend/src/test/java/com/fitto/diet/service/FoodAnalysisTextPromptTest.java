@@ -64,11 +64,13 @@ class FoodAnalysisTextPromptTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void 합계도_반드시_채우게_한다() {
+    void 합계는_모델에게_받지_않는다() {
+        // flash-lite 가 합계 자리에서 0 을 끝없이 찍다 잘리는 퇴행 — 합계는 서버가 항목을 더한다
+        Map<String, Object> properties = (Map<String, Object>) FoodAnalysisService.RESPONSE_SCHEMA.get("properties");
         List<String> required = (List<String>) FoodAnalysisService.RESPONSE_SCHEMA.get("required");
 
-        assertThat(required).contains("isFood", "foods", "totalCalories",
-                "totalCarbs", "totalProtein", "totalFat");
+        assertThat(properties.keySet()).noneMatch(k -> k.startsWith("total"));
+        assertThat(required).containsExactly("isFood", "foods");
     }
 
     /**

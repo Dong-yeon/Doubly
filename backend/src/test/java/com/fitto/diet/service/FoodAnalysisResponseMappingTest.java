@@ -71,6 +71,31 @@ class FoodAnalysisResponseMappingTest {
         assertThat(response.source()).isEqualTo("TEXT_IN_PHOTO");
     }
 
+    /** 합계는 항목의 합이다 — 모델이 합계를 보내도(옛 스키마·환각) 쓰지 않는다 */
+    @Test
+    void 합계는_항목을_더한_값이고_모델이_보낸_합계는_무시한다() throws Exception {
+        JsonNode result = json("""
+                {
+                  "isFood": true,
+                  "foods": [
+                    {"name": "연어초밥", "calories": 480, "portion": "14피스",
+                     "carbs": 70, "protein": 30, "fat": 10, "sugar": 8, "sodium": 900, "fiber": 1},
+                    {"name": "광어초밥", "calories": 280, "portion": "10피스",
+                     "carbs": 50, "protein": 20, "fat": 3, "sugar": 6, "sodium": 700, "fiber": 1}
+                  ],
+                  "totalCalories": 9999, "totalSugar": 800000000
+                }
+                """);
+        when(geminiClient.generateJsonWhileWaiting(any(), any(), any(), any())).thenReturn(result);
+
+        MealAnalysisResponse response = service.analyzeText(1L, "초밥");
+
+        assertThat(response.totalCalories()).isEqualTo(760);
+        assertThat(response.totalCarbs()).isEqualTo(120);
+        assertThat(response.totalSugar()).isEqualTo(14);
+        assertThat(response.totalSodium()).isEqualTo(1600);
+    }
+
     @Test
     void source가_유효한_값이면_그대로_쓰인다() throws Exception {
         JsonNode result = json("""
