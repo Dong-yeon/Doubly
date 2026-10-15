@@ -27,3 +27,11 @@ MAX_ATTEMPTS = 3            # 작업을 집은 횟수 상한 — 넘으면 FAILE
 RUN_BUDGET_SECONDS = 240    # cron 한 번에 쓰는 시간(5분 주기보다 짧게)
 
 SIZE_CACHE_DAYS = 90        # spot_photo_sizes 를 이보다 오래 두지 않는다
+
+# ── AI 편집 생성기 d3 (2026-10-15, docs/spot-diff-design §9-2 안 B) ──
+# 켜는 스위치는 환경 변수 SPOT_AI_ENABLED=true + GEMINI_IMAGE_API_KEY. 개인정보처리방침에 "틀린그림찾기 생성에 Gemini 로
+# 사진 전송"이 들어가기 전에는 켜지 않는다(방침 1.5 의 Gemini 위탁 목적은 음식 사진·운동 데이터 분석뿐).
+AI_GENERATOR_VERSION = "d3"
+AI_PHOTOS_PER_JOB = 2        # AI 로 시도하는 사진 수
+AI_CALLS_PER_JOB = 4         # 작업 하나의 AI 호출 상한(사진 한 장은 최대 3회)
+AI_DAILY_CALL_LIMIT = 200    # 최근 24시간 AI 호출 상한(전 커플 합계, 1K ≈ $0.067/회 → 약 $13/일). SPOT_AI_DAILY_CALL_LIMIT 로 바꾼다

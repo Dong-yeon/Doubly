@@ -78,7 +78,7 @@ def finish_ready(conn, job, outcome, a_url, b_url):
             where id = %s and status = 'PENDING'
             """,
             (c["type"], c["id"], c["url"], a_url, b_url, outcome.width, outcome.height,
-             json.dumps(outcome.layout), outcome.seed, config.LEVEL, config.GENERATOR_VERSION, job.puzzle_id))
+             json.dumps(outcome.layout), outcome.seed, outcome.layout.get("level", config.LEVEL), outcome.generator, job.puzzle_id))
         ok = cur.rowcount == 1
         cur.execute("update spot_puzzle_jobs set status = 'DONE', error = %s, updated_at = now() where id = %s",
                     (None if ok else "퍼즐이 더는 PENDING 이 아니라 결과를 버렸어요", job.id))
@@ -109,3 +109,24 @@ def _close(cur, job_id, puzzle_id, puzzle_status, job_status, reason):
                 "where id = %s and status = 'PENDING'", (puzzle_status, (reason or "")[:500], puzzle_id))
     cur.execute("update spot_puzzle_jobs set status = %s, error = %s, updated_at = now() where id = %s",
                 (job_status, (reason or "")[:500], job_id))
+
+
+def ai_calls_last_day(conn) -> int:
+    """최근 24시간 AI 편집 호출 합계(V144 spot_puzzle_jobs.ai_calls) — 일일 상한 확인용"""
+    with conn.cursor() as cur:
+        cur.execute("select coalesce(sum(ai_calls), 0) from spot_puzzle_jobs where updated_at >= now() - interval '1 day'")
+        return int(cur.fetchone()[0])
+
+
+def record_ai_calls(conn, job, calls: int):
+    if calls <= 0:
+        return
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("update spot_puzzle_jobs set ai_calls = ai_calls + %s, updated_at = now() where id = %s", (calls, job.id))
+
+
+def defer(conn, job, reason):
+    """오늘은 못 한다(AI 일일 상한) — 집은 횟수를 되돌리고 대기열로. 다음 실행이 다시 본다"""
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("update spot_puzzle_jobs set status = 'QUEUED', locked_at = null, attempts = greatest(attempts - 1, 0), "
+                    "error = %s, updated_at = now() where id = %s", (str(reason)[:500], job.id))

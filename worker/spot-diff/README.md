@@ -31,6 +31,18 @@ worker 는 **DB 와 R2, 원본 사진 주소(res.cloudinary.com·media.dubly.co.
 | `R2_PUBLIC_BASE_URL` | `https://media.dubly.co.kr` | 백엔드 `r2.public-base-url` 과 같아야 서버가 지운다 |
 | `CLOUDINARY_FOLDER` | 백엔드와 같은 값(기본 `fitto`) | R2 키의 루트 폴더 — 서버 삭제기가 "우리 파일"로 알아보는 기준 |
 | `SPOT_ALLOWED_HOSTS` | (선택) 기본 `res.cloudinary.com,media.dubly.co.kr` | 원본 사진을 받을 호스트 |
+| `SPOT_AI_ENABLED` | `true` 로 켜면 AI 편집 생성기(d3) — **개인정보처리방침 개정 뒤에만** | 꺼져 있으면 superpixel 생성기(d1) |
+| `GEMINI_IMAGE_API_KEY`, `GEMINI_IMAGE_MODEL` | `${{Doubly-Back.GEMINI_IMAGE_API_KEY}}` 등 | 우리 이모지와 같은 결제 키. 1K ≈ $0.067/회 |
+| `SPOT_AI_DAILY_CALL_LIMIT` | (선택) 기본 `200` | 최근 24시간 AI 호출 합계 상한 — 넘으면 생성을 미룬다 |
+
+### AI 생성기(d3) 시험
+
+```bash
+# 사진 한 장 — 결과·차이 지도·정답 원(호출 최대 3회). 키는 Railway 변수를 그대로 주입(화면에 찍히지 않는다)
+railway run --service Doubly-Back -- docker run --rm -e GEMINI_IMAGE_API_KEY -e GEMINI_IMAGE_MODEL \
+  -v "$PWD":/app -v <사진폴더>:/data -w /app python:3.12-slim \
+  sh -c "pip install -q -r requirements.txt && python -m tools.try_ai /data/photo.jpg /data/out"
+```
 
 3. 배포 순서: **서버(V143) → worker → 앱**. worker 가 먼저 뜨면 테이블이 없어 실패한다.
 

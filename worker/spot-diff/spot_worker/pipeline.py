@@ -10,7 +10,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from . import config, faces, images
+from . import ai_generator, config, faces, images
 from .generator import GenerationFailed, generate
 
 log = logging.getLogger(__name__)
@@ -28,6 +28,8 @@ class Outcome:
     image_a: Optional[bytes] = None
     image_b: Optional[bytes] = None
     new_sizes: list = field(default_factory=list)  # [(url, w, h)] — 크기 캐시에 넣을 것
+    ai_calls: int = 0                              # AI 편집 호출 수(실패한 것 포함 — 비용은 나갔다)
+    generator: str = config.GENERATOR_VERSION
 
 
 # 사진 출처 우선순위(2026-10-15 사용자 결정) — 일상 → 럽슐랭 방문·공유 운동 → 식단.
@@ -58,7 +60,11 @@ def build(candidates: list, job_seed: int,
           fetch_head: Callable[[str], bytes],
           fetch_full: Callable[[str], bytes],
           cached_sizes: dict,
-          detect_faces: Callable = faces.detect) -> Outcome:
+          detect_faces: Callable = faces.detect,
+          ai_edit: Optional[Callable] = None,
+          ai_budget: int = 0) -> Outcome:
+    """ai_edit 이 있으면 AI 편집 생성기(d3)로, 없으면 superpixel 생성기(d1)로 만든다.
+    ai_budget = 이 작업에서 쓸 수 있는 AI 호출 수 상한."""
     order = prioritized(candidates, job_seed)
 
     # 1) 크기 — 캐시에 없으면 앞부분만 받아 헤더에서 읽는다. 5장이 모이면 그만 본다(다 받을 필요가 없다)
@@ -79,6 +85,9 @@ def build(candidates: list, job_seed: int,
                 break
     if len(qualified) < config.MIN_PHOTOS:
         return Outcome("NOT_ENOUGH_PHOTOS", reason=f"조건을 채운 사진 {len(qualified)}장", new_sizes=new_sizes)
+
+    if ai_edit is not None:
+        return _build_ai(qualified, job_seed, fetch_full, detect_faces, ai_edit, ai_budget, new_sizes)
 
     # 2) 생성 — 사진 하나에 시드 3개, 안 되면 다음 사진(최대 3장)
     reasons = []
@@ -102,3 +111,36 @@ def build(candidates: list, job_seed: int,
                 layout=dict(width=w, height=h, level=config.LEVEL, generator=config.GENERATOR_VERSION, diffs=diffs),
                 image_a=images.encode_jpeg(img), image_b=images.encode_jpeg(out), new_sizes=new_sizes)
     return Outcome("FAILED", reason=" / ".join(reasons)[:500] or "만들 수 있는 사진이 없어요", new_sizes=new_sizes)
+
+
+def _build_ai(qualified, job_seed, fetch_full, detect_faces, ai_edit, ai_budget, new_sizes) -> Outcome:
+    """d3 — 사진마다 AI 편집(최대 3회), 안 되면 다음 사진. 작업 전체 호출은 ai_budget 을 넘지 않는다."""
+    reasons, calls = [], 0
+    for pi, c in enumerate(qualified[:config.AI_PHOTOS_PER_JOB]):
+        if calls >= ai_budget:
+            reasons.append("AI 호출 상한")
+            break
+        try:
+            img = images.fit_long_side(images.load_oriented(fetch_full(c["url"])))
+        except Exception as e:
+            reasons.append(f"사진{pi + 1} 읽기 실패: {e}")
+            continue
+        protect = faces.protect_mask(img.shape, detect_faces(img))
+        try:
+            out, diffs, used = ai_generator.generate(img, config.DIFF_COUNT, protect, edit=ai_edit,
+                                                     max_calls=ai_budget - calls)
+        except ai_generator.AiGenerationFailed as e:
+            calls += e.calls
+            reasons.append(f"사진{pi + 1}: {e}")
+            if e.stop:
+                break
+            continue
+        calls += used
+        h, w = img.shape[:2]
+        return Outcome(
+            "READY", candidate=c, seed=job_seed, width=w, height=h,
+            layout=dict(width=w, height=h, level="ai", generator=config.AI_GENERATOR_VERSION, diffs=diffs),
+            image_a=images.encode_jpeg(img), image_b=images.encode_jpeg(out), new_sizes=new_sizes,
+            ai_calls=calls, generator=config.AI_GENERATOR_VERSION)
+    return Outcome("FAILED", reason=" / ".join(reasons)[:500] or "만들 수 있는 사진이 없어요", new_sizes=new_sizes,
+                   ai_calls=calls, generator=config.AI_GENERATOR_VERSION)

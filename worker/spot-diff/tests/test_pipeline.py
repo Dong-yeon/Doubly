@@ -125,6 +125,39 @@ def test_앞_순위에서_5장이_차면_식단_사진은_보지도_않는다(bi
     assert all("/m" not in u for u in store.heads + store.fulls)
 
 
+def test_AI_경로는_작업_호출_상한을_지키고_실패해도_쓴_호출을_남긴다(big_jpeg):
+    cands = [cand(i) for i in range(5)]
+    store = FakeStore({c["url"]: big_jpeg for c in cands})
+    seen = []
+
+    def weak_edit(img, attempt=0):        # 바꾸는 게 거의 없는 편집 — 차이를 못 채운다
+        seen.append(attempt)
+        return img.copy()
+
+    out = pipeline.build(cands, 3, store.head, store.full, {}, no_faces, ai_edit=weak_edit, ai_budget=4)
+    assert out.status == "FAILED"
+    assert out.ai_calls == 4 and len(seen) == 4      # 사진1 3회 + 사진2 1회에서 멈춘다
+    assert out.generator == config.AI_GENERATOR_VERSION
+
+
+def test_AI_경로_성공은_d3_로_기록된다(big_jpeg):
+    import cv2
+    cands = [cand(i) for i in range(5)]
+    store = FakeStore({c["url"]: big_jpeg for c in cands})
+    spots = [(250, 250), (750, 220), (1250, 260), (400, 800), (1100, 820)]
+
+    def good_edit(img, attempt=0):
+        out = img.copy()
+        for (x, y), color in zip(spots, [(255, 0, 0), (0, 0, 255), (0, 255, 0), (0, 255, 255), (255, 0, 255)]):
+            cv2.circle(out, (x, y), 45, color, -1)
+        return out
+
+    out = pipeline.build(cands, 3, store.head, store.full, {}, no_faces, ai_edit=good_edit, ai_budget=4)
+    assert out.status == "READY" and out.ai_calls == 1
+    assert out.layout["generator"] == "d3" and len(out.layout["diffs"]) == 5
+    assert all(d["kind"] == "ai" for d in out.layout["diffs"])
+
+
 def test_원본_주소는_https_와_허용_호스트만_받는다():
     fetch.check_url("https://res.cloudinary.com/x/image/upload/a.jpg")
     fetch.check_url("https://media.dubly.co.kr/fitto/a.jpg")
