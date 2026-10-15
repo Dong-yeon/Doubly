@@ -11,6 +11,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -61,6 +62,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         return badRequest("요청 값이 올바르지 않습니다: " + e.getName());
+    }
+
+    /**
+     * 필수 쿼리 파라미터 누락 → 400. 예: {@code /places/search}(query 없음), {@code /places/nearby?kind=FOOD}(범위 없음).
+     * 없으면 위 타입 불일치와 같은 이유로 500 + 스택트레이스가 됐다(2026-10-15 둘러보기 이상 입력 점검에서 발견).
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException e) {
+        return badRequest("필수 값이 빠졌습니다: " + e.getParameterName());
     }
 
     /** 필수 헤더 누락 (예: Authorization) → 400 */
