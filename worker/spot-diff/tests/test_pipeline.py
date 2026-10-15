@@ -103,6 +103,28 @@ def test_READY_결과는_재현_정보와_EXIF_없는_두_이미지를_가진다
     assert a.image_a[:2] == b"\xff\xd8" and b"Exif" not in a.image_a[:64] and b"Exif" not in a.image_b[:64]
 
 
+def test_후보는_일상_방문운동_식단_순서로_고르고_같은_순위_안에서만_섞는다():
+    cands = ([{"type": "MEAL", "id": i, "url": f"m{i}"} for i in range(5)]
+             + [{"type": "WORKOUT", "id": 1, "url": "w1"}, {"type": "PLACE_VISIT", "id": 1, "url": "v1"}]
+             + [{"type": "POST", "id": i, "url": f"p{i}"} for i in range(3)])
+    order = pipeline.prioritized(cands, 42)
+    assert [c["type"] for c in order[:3]] == ["POST"] * 3
+    assert {c["type"] for c in order[3:5]} == {"WORKOUT", "PLACE_VISIT"}
+    assert [c["type"] for c in order[5:]] == ["MEAL"] * 5
+    assert order == pipeline.prioritized(cands, 42)          # 같은 작업 = 같은 순서
+    assert order != pipeline.prioritized(cands, 7)           # 시드가 다르면 순위 안 순서가 달라진다
+
+
+def test_앞_순위에서_5장이_차면_식단_사진은_보지도_않는다(big_jpeg, small_jpeg):
+    posts = [{"type": "POST", "id": i, "url": f"https://res.cloudinary.com/demo/image/upload/v1/fitto/p{i}.jpg"} for i in range(5)]
+    meals = [{"type": "MEAL", "id": i, "url": f"https://res.cloudinary.com/demo/image/upload/v1/fitto/m{i}.jpg"} for i in range(5)]
+    store = FakeStore({c["url"]: big_jpeg for c in posts + meals})
+    out = pipeline.build(meals + posts, 5, store.head, store.full, {}, no_faces)
+    assert out.status == "READY"
+    assert out.candidate["type"] == "POST"
+    assert all("/m" not in u for u in store.heads + store.fulls)
+
+
 def test_원본_주소는_https_와_허용_호스트만_받는다():
     fetch.check_url("https://res.cloudinary.com/x/image/upload/a.jpg")
     fetch.check_url("https://media.dubly.co.kr/fitto/a.jpg")

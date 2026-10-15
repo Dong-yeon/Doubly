@@ -30,6 +30,25 @@ class Outcome:
     new_sizes: list = field(default_factory=list)  # [(url, w, h)] — 크기 캐시에 넣을 것
 
 
+# 사진 출처 우선순위(2026-10-15 사용자 결정) — 일상 → 럽슐랭 방문·공유 운동 → 식단.
+# 식단은 하루 2~3장씩 쌓여 그냥 섞으면 퍼즐 대부분이 접시 클로즈업이 된다. 앞 순위에서 조건(짧은 변 1000px)을 채운
+# 사진이 5장이 안 될 때만 식단까지 내려간다. 모르는 출처는 맨 뒤.
+TYPE_RANK = {"POST": 0, "PLACE_VISIT": 1, "WORKOUT": 1, "MEAL": 2}
+
+
+def prioritized(candidates: list, job_seed: int) -> list:
+    """순위별로 묶고, 같은 순위 안에서만 시드로 섞는다(같은 작업 = 같은 순서)."""
+    tiers = {}
+    for c in candidates:
+        tiers.setdefault(TYPE_RANK.get(c.get("type"), 9), []).append(c)
+    order = []
+    for rank in sorted(tiers):
+        group = list(tiers[rank])
+        random.Random(job_seed * 31 + rank).shuffle(group)
+        order.extend(group)
+    return order
+
+
 def attempt_seed(job_seed: int, photo_index: int, attempt: int) -> int:
     """시도마다 쓰는 시드 — 작업 시드에서 정해지므로 같은 작업을 다시 돌리면 같은 순서로 같은 결과가 나온다."""
     return (job_seed * 1_000_003 + photo_index * 101 + attempt) % (2 ** 31)
@@ -40,8 +59,7 @@ def build(candidates: list, job_seed: int,
           fetch_full: Callable[[str], bytes],
           cached_sizes: dict,
           detect_faces: Callable = faces.detect) -> Outcome:
-    order = list(candidates)
-    random.Random(job_seed).shuffle(order)
+    order = prioritized(candidates, job_seed)
 
     # 1) 크기 — 캐시에 없으면 앞부분만 받아 헤더에서 읽는다. 5장이 모이면 그만 본다(다 받을 필요가 없다)
     qualified, new_sizes = [], []
