@@ -156,10 +156,14 @@ public class SpotPuzzle extends BaseTimeEntity {
         failReason = "공유 사진 후보 " + candidates + "장 (" + checkedAt + ")";
     }
 
-    /** 사진이 모자랐던 판을 다시 만들어 본다 — 그사이 사진을 올렸을 수 있다 */
+    /**
+     * 다시 만들어 본다 — 사진이 모자랐던 판(그사이 사진을 올렸을 수 있다)과 만들기에 실패한 판(업로드 장애처럼
+     * 사진과 무관한 실패일 수 있다, 2026-10-15).
+     */
     public void retryPending() {
-        if (status == SpotPuzzleStatus.NOT_ENOUGH_PHOTOS) {
+        if (status == SpotPuzzleStatus.NOT_ENOUGH_PHOTOS || status == SpotPuzzleStatus.FAILED) {
             status = SpotPuzzleStatus.PENDING;
+            failReason = null;
         }
     }
 

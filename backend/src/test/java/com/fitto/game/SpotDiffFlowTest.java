@@ -480,6 +480,37 @@ class SpotDiffFlowTest {
     }
 
     @Test
+    void 만들기에_실패한_오늘_판은_목록을_열면_다시_만들고_작업_3개까지만() {
+        long[] c = couple("ga", "gb");
+        for (int i = 0; i < 6; i++) {
+            insertPost(c[2], c[0], "https://res.cloudinary.com/demo/image/upload/v1/fitto/g" + i + UUID.randomUUID() + ".jpg");
+        }
+        // 2026-10-15 운영: 업로드 장애로 작업이 다 실패해 오늘 판이 FAILED 로 닫혔다
+        jdbc.update("""
+                insert into spot_puzzles (couple_id, puzzle_date, status, fail_reason, result_posted, created_at, updated_at, expires_at)
+                values (?, ?, 'FAILED', '작업을 여러 번 시도했지만 끝내지 못했어요', false, ?, ?, ?)
+                """, c[2], com.fitto.common.time.KstClock.today(),
+                Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()),
+                Timestamp.valueOf(LocalDateTime.now().plus(SpotDiffRules.LIFETIME)));
+        long id = jdbc.queryForObject("select max(id) from spot_puzzles where couple_id = ?", Long.class, c[2]);
+        jdbc.update("insert into spot_puzzle_jobs (puzzle_id, status, candidates, seed, attempts) values (?, 'FAILED', '[]', 1, 3)", id);
+
+        SpotPuzzleResponse retried = service.list(c[0]).puzzles().get(0);
+        assertThat(retried.id()).isEqualTo(id);
+        assertThat(retried.status()).isEqualTo("PENDING");
+        assertThat(jobRepository.findByPuzzleId(id)).hasSize(2);
+        assertThat(puzzleRepository.findById(id).orElseThrow().getFailReason()).isNull();
+
+        // 작업이 셋이 될 때까지만 — 다시 실패해도 넷째 작업은 만들지 않는다
+        jdbc.update("update spot_puzzles set status = 'FAILED' where id = ?", id);
+        service.list(c[1]);
+        assertThat(jobRepository.findByPuzzleId(id)).hasSize(3);
+        jdbc.update("update spot_puzzles set status = 'FAILED' where id = ?", id);
+        assertThat(service.list(c[0]).puzzles().get(0).status()).isEqualTo("FAILED");
+        assertThat(jobRepository.findByPuzzleId(id)).hasSize(3);
+    }
+
+    @Test
     void 관계를_지우면_퍼즐과_풀이가_함께_지워진다() {
         long[] c = couple("xa", "xb");
         long id = readyPuzzle(c);

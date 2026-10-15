@@ -36,6 +36,9 @@ public class SpotDiffGenerator {
     /** 사진이 모자랐던 오늘 판을 다시 시도하기까지 — 목록을 열 때마다 작업을 쌓지 않게 */
     static final Duration NOT_ENOUGH_RETRY = Duration.ofHours(1);
 
+    /** 실패한 판을 다시 만들어 보는 상한 — 첫 작업 포함. 작업 하나가 사진 3장 × 시드 3개를 해 본다 */
+    static final int MAX_JOBS_PER_PUZZLE = 3;
+
     private final SpotPuzzleRepository puzzles;
     private final SpotPuzzleJobRepository jobs;
     private final RelationRepository relationRepository;
@@ -65,6 +68,12 @@ public class SpotDiffGenerator {
         }
         if (existing.getStatus() == SpotPuzzleStatus.NOT_ENOUGH_PHOTOS && existing.getUpdatedAt() != null
                 && existing.getUpdatedAt().isBefore(LocalDateTime.now().minus(NOT_ENOUGH_RETRY))) {
+            enqueue(couple, existing);
+        }
+        // 실패한 판은 바로 다시 — 작업마다 시드가 달라 다른 사진·다른 변형을 고른다. 장애가 계속되면 끝없이 쌓이지 않게
+        // 판당 작업 수로 막는다(2026-10-15: R2 키 줄바꿈으로 업로드가 실패했는데 "사진이 단순하다"로 하루가 막혔다)
+        if (existing.getStatus() == SpotPuzzleStatus.FAILED
+                && jobs.findByPuzzleId(existing.getId()).size() < MAX_JOBS_PER_PUZZLE) {
             enqueue(couple, existing);
         }
         return existing;
