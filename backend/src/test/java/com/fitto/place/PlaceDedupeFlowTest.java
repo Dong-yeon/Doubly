@@ -64,6 +64,23 @@ class PlaceDedupeFlowTest {
     }
 
     @Test
+    void 지도_둘러보기는_범위가_뒤집혔거나_30km를_넘으면_거절하고_키가_없으면_unavailable() {
+        // 테스트 프로파일엔 카카오 키가 없다 — 범위가 맞으면 "쓸 수 없음"으로 답한다(오류 아님)
+        assertThat(placeService.nearby(PlaceService.NearbyKind.FOOD, 37.55, 126.90, 37.58, 126.95).available()).isFalse();
+        assertThat(placeService.nearby(PlaceService.NearbyKind.SPOT, 37.55, 126.90, 37.58, 126.95).places()).isEmpty();
+
+        // 남서·북동이 뒤바뀜
+        assertThatThrownBy(() -> placeService.nearby(PlaceService.NearbyKind.CAFE, 37.58, 126.95, 37.55, 126.90))
+                .isInstanceOf(com.fitto.common.exception.BusinessException.class);
+        // 서울 전체보다 넓다(약 55km) — "주변"이 아니다
+        assertThatThrownBy(() -> placeService.nearby(PlaceService.NearbyKind.CAFE, 37.30, 126.70, 37.80, 127.20))
+                .isInstanceOf(com.fitto.common.exception.BusinessException.class);
+        // NaN 은 비교가 전부 거짓이라 걸러져야 한다
+        assertThatThrownBy(() -> placeService.nearby(PlaceService.NearbyKind.FOOD, Double.NaN, 126.90, 37.58, 126.95))
+                .isInstanceOf(com.fitto.common.exception.BusinessException.class);
+    }
+
+    @Test
     void 같은_kakaoPlaceId로_다시_저장하면_새로_생기지_않고_기존_장소를_돌려준다() {
         long[] users = couple("dedupe1a@fitto.com", "dedupe1b@fitto.com");
 

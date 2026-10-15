@@ -152,7 +152,22 @@ public class PlaceController {
     }
 
     /**
-     * 채팅 링크 해석 — 지도 링크(카카오·네이버)를 장소 후보로 바꾼다. 저장은 하지 않는다: 앱이 고른 후보를
+     * 지도 둘러보기 — 지금 보이는 범위 안의 맛집(FOOD)·카페(CAFE)·가볼 만한 곳(SPOT)을 카카오 카테고리 검색으로
+     * (GET /places/nearby). 응답은 {@link #search} 와 같은 모양이라 결과를 그대로 {@link #save} 에 넘긴다.
+     * 범위 한 변이 약 30km 를 넘으면 400.
+     */
+    @GetMapping("/nearby")
+    public ApiResponse<PlaceSearchResponse> nearby(@AuthenticationPrincipal AuthUser user,
+                                                   @RequestParam PlaceService.NearbyKind kind,
+                                                   @RequestParam double swLat,
+                                                   @RequestParam double swLng,
+                                                   @RequestParam double neLat,
+                                                   @RequestParam double neLng) {
+        return ApiResponse.success(placeService.nearby(kind, swLat, swLng, neLat, neLng));
+    }
+
+    /**
+     * 채팅 링크 해석 —지도 링크(카카오·네이버)를 장소 후보로 바꾼다. 저장은 하지 않는다: 앱이 고른 후보를
      * {@link #save} 로 넘겨야 플랜 한도·중복 방지를 장소 추가와 똑같이 탄다. 칩을 눌렀을 때만 부른다.
      */
     @PostMapping("/resolve-link")

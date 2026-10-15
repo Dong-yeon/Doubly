@@ -110,6 +110,53 @@ public class KakaoLocalClient {
         return results;
     }
 
+    private static final String CATEGORY_URL =
+            "https://dapi.kakao.com/v2/local/search/category.json"
+                    + "?category_group_code={code}&rect={rect}&page={page}&size=15";
+
+    /** 카테고리 검색 한 번에 받는 쪽수 상한 — 카카오는 쪽당 15곳, 한 질의에 45곳(3쪽)까지만 준다 */
+    public static final int CATEGORY_MAX_PAGES = 3;
+
+    /**
+     * 카테고리 검색 — 지도에 보이는 사각 범위 안의 그 업종 장소(럽슐랭 지도 "둘러보기").
+     * 순서는 카카오의 정확도순 그대로다(좌표를 안 주므로 거리순이 아니다). 실패하면 그때까지 받은 것만 돌려준다.
+     *
+     * @param groupCode 카카오 category_group_code(FD6 음식점·CE7 카페·AT4 관광명소·CT1 문화시설 …)
+     * @param pages     1~{@link #CATEGORY_MAX_PAGES} — 1쪽에 15곳
+     */
+    public List<KakaoPlace> searchCategory(String groupCode, double swLat, double swLng,
+                                           double neLat, double neLng, int pages) {
+        if (!properties.isConfigured()) {
+            return List.of();
+        }
+        // 카카오 rect = "왼쪽 x,아래 y,오른쪽 x,위 y" (x=경도, y=위도)
+        String rect = swLng + "," + swLat + "," + neLng + "," + neLat;
+        List<KakaoPlace> results = new ArrayList<>();
+        int last = Math.clamp(pages, 1, CATEGORY_MAX_PAGES);
+        for (int page = 1; page <= last; page++) {
+            JsonNode root;
+            try {
+                root = restClient.get()
+                        .uri(CATEGORY_URL, groupCode, rect, page)
+                        .header("Authorization", "KakaoAK " + properties.getRestApiKey())
+                        .retrieve()
+                        .body(JsonNode.class);
+            } catch (RestClientResponseException | ResourceAccessException e) {
+                log.warn("카카오 카테고리 검색 실패 (code={}, page={}): {}", groupCode, page, e.getMessage());
+                break;
+            }
+            if (root == null) break;
+            for (JsonNode doc : root.path("documents")) {
+                KakaoPlace place = mapDocument(doc);
+                if (place != null) {
+                    results.add(place);
+                }
+            }
+            if (root.path("meta").path("is_end").asBoolean(true)) break;
+        }
+        return results;
+    }
+
     /** package-private — HTTP 없이 매핑 로직만 단위 테스트하기 위해 (FoodDbClient.map 과 같은 패턴) */
     KakaoPlace mapDocument(JsonNode doc) {
         String name = doc.path("place_name").asText("");
