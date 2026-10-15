@@ -15,8 +15,9 @@ class R2Uploader:
     def __init__(self):
         account = os.environ["R2_ACCOUNT_ID"]
         self.bucket = os.environ["R2_BUCKET"]
-        self.public_base = os.environ.get("R2_PUBLIC_BASE_URL", "https://media.dubly.co.kr").rstrip("/")
-        self.root = os.environ.get("CLOUDINARY_FOLDER", "fitto")  # 서버의 루트 폴더(cloudinary.folder)와 같아야 지울 수 있다
+        # 비어 있는 값도 기본값으로 — Railway 에서 다른 서비스 변수를 참조했는데 그쪽에 값이 없으면 빈 문자열이 들어온다
+        self.public_base = (os.environ.get("R2_PUBLIC_BASE_URL") or "https://media.dubly.co.kr").rstrip("/")
+        self.root = os.environ.get("CLOUDINARY_FOLDER") or "fitto"  # 서버의 루트 폴더(cloudinary.folder)와 같아야 지울 수 있다
         self.client = boto3.client(
             "s3",
             endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
