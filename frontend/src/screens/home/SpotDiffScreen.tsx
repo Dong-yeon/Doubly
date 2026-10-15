@@ -351,7 +351,12 @@ function StatusPanel({
     );
   }
   if (puzzle.status === 'FAILED') {
-    return <Card title="오늘은 퍼즐을 만들지 못했어요" desc="사진이 너무 단순하면 다섯 군데를 바꾸기 어려워요. 내일 다른 사진으로 다시 만들어요." />;
+    // 실패 원인이 사진이 아닐 수도 있다(2026-10-15 업로드 장애) — 사진 탓을 하지 않고, 다시 열면 서버가 다른 사진으로 다시 만든다
+    return (
+      <Card title="퍼즐을 아직 못 만들었어요" desc="다시 만들어 볼게요. 몇 분 뒤 새로고침해 주세요.">
+        <Button title="다시 만들기" variant="secondary" size="sm" onPress={onRefresh} style={styles.cardBtn} />
+      </Card>
+    );
   }
   if (puzzle.expireReason === 'PHOTO_REMOVED') {
     return <Card title="이 퍼즐은 닫혔어요" desc="퍼즐에 쓴 사진이 지워지거나 비공개로 바뀌어서, 만든 퍼즐도 함께 지웠어요." />;
