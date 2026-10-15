@@ -161,6 +161,13 @@ public enum ErrorCode {
     QUARTO_PIECE_MISMATCH(HttpStatus.CONFLICT, "받은 말과 다른 말이에요. 판을 다시 불러와 주세요."),
     QUARTO_PIECE_USED(HttpStatus.UNPROCESSABLE_ENTITY, "이미 쓴 말은 줄 수 없어요."),
     QUARTO_GIVE_ON_WIN(HttpStatus.UNPROCESSABLE_ENTITY, "이기는 수에는 말을 줄 수 없어요."),
+    /* 틀린그림찾기(V143) */
+    SPOT_DIFF_NOT_READY(HttpStatus.CONFLICT, "아직 퍼즐을 만드는 중이에요. 잠시 뒤에 다시 열어 주세요."),
+    SPOT_DIFF_CLOSED(HttpStatus.CONFLICT, "이 퍼즐은 닫혔어요."),
+    SPOT_DIFF_FINISHED(HttpStatus.CONFLICT, "이미 다섯 개를 다 찾았어요."),
+    SPOT_DIFF_NOT_STARTED(HttpStatus.CONFLICT, "퍼즐을 먼저 열어 주세요."),
+    SPOT_DIFF_TAP_RANGE(HttpStatus.BAD_REQUEST, "사진 밖을 눌렀어요."),
+    SPOT_DIFF_DAILY_ONLY(HttpStatus.CONFLICT, "오늘의 퍼즐은 하루에 한 판이에요. 내일 새 퍼즐이 열려요."),
     // 사진 관련 — 원인별로 분리해 어떤 문제인지 바로 보이게 한다
     INVALID_PHOTO_URL(HttpStatus.BAD_REQUEST, "앱에서 촬영·선택해 올린 사진만 분석할 수 있어요."),
     PHOTO_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 너무 커요 (최대 10MB). 더 작은 사진으로 시도해주세요."),

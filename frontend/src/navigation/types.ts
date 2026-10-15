@@ -54,6 +54,8 @@ export type HomeStackParamList = PlaceScreensParamList & {
   Quarto: undefined;
   /** 넷이 같아 연습 — 튜토리얼 + AI 대전, 앱 안에서만(기록 없음) */
   QuartoPractice: undefined;
+  /** 사진 틀린그림찾기 — 우리 공유 사진으로 서버가 만든 퍼즐을 각자 푼다(승부 없음) */
+  SpotDiff: undefined;
   // 커플 캘린더 — 기념일 외 일정·생일·데이트 약속 + D-day 푸시
   CoupleCalendar: undefined;
   // MY (구 MY 탭에서 이전) — 홈 헤더 프로필 아이콘으로 진입

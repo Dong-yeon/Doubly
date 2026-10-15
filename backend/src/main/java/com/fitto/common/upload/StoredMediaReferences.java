@@ -46,6 +46,7 @@ public class StoredMediaReferences {
             Map.entry("contents", List.of("poster_url")),
             Map.entry("couple_emojis", List.of("image_url")),
             Map.entry("trips", List.of("cover_image_url")),
+            Map.entry("spot_puzzles", List.of("image_a_url", "image_b_url")),
             Map.entry("voice_clips", List.of("audio_url")),
             Map.entry("workout_boosters", List.of("audio_url")));
 

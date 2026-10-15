@@ -70,6 +70,7 @@ const HIDE_TAB_BAR_ON = new Set([
   'Puyo',
   'Quarto',
   'QuartoPractice',
+  'SpotDiff',
 ]);
 
 /**

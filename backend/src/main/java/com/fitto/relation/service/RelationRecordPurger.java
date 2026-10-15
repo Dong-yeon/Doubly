@@ -109,6 +109,14 @@ public class RelationRecordPurger {
         exec("delete from quarto_moves where game_id in (select id from couple_games where couple_id = :rid)", relationId);
         // 커플 게임(V86, 협동 스도쿠) — relations/users 를 참조한다. 자식은 위의 quarto_moves 뿐
         exec("delete from couple_games where couple_id = :rid", relationId);
+        // 틀린그림찾기(V143) — taps → plays → jobs → puzzles(relations 참조). A/B 이미지는 collectImageUrls 가 모았다
+        exec("delete from spot_puzzle_taps where play_id in (select pl.id from spot_puzzle_plays pl where pl.puzzle_id in "
+                + "(select p.id from spot_puzzles p where p.couple_id = :rid))", relationId);
+        exec("delete from spot_puzzle_plays where puzzle_id in "
+                + "(select p.id from spot_puzzles p where p.couple_id = :rid)", relationId);
+        exec("delete from spot_puzzle_jobs where puzzle_id in "
+                + "(select p.id from spot_puzzles p where p.couple_id = :rid)", relationId);
+        exec("delete from spot_puzzles where couple_id = :rid", relationId);
         // mood_statuses.couple_emoji_id 가 couple_emojis 를 참조하므로(V81) 무드를 먼저 지운다 —
         // 아래 couple_emojis 삭제보다 뒤로 옮기면 FK 위반으로 관계 삭제가 실패한다.
         exec("delete from mood_statuses where couple_id = :rid", relationId);
@@ -189,6 +197,11 @@ public class RelationRecordPurger {
                 + "where t.couple_id = :rid and t.cover_image_url is not null", relationId));
         urls.addAll(select("select m.image_url from chat_messages m "
                 + "where m.relation_id = :rid and m.image_url is not null", relationId));
+        // 틀린그림찾기 A/B(V143) — 원본 사진에서 만든 사본이라 원본과 함께 사라져야 한다
+        urls.addAll(select("select p.image_a_url from spot_puzzles p "
+                + "where p.couple_id = :rid and p.image_a_url is not null", relationId));
+        urls.addAll(select("select p.image_b_url from spot_puzzles p "
+                + "where p.couple_id = :rid and p.image_b_url is not null", relationId));
         // 음성 메시지는 파일 URL 이 image_url 이 아니라 content("{audioUrl}|{초}")에 들어 있다.
         // 오디오는 /video/upload 자산이다 — 삭제기가 URL 을 보고 video/destroy 로 보낸다.
         for (String content : select("select m.content from chat_messages m "

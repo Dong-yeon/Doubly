@@ -90,6 +90,19 @@ public class RelationRecordRestorer {
         // 세트 메타(V138)도 relations FK 를 가진다 — 같은 이유로 함께 옮긴다. 남기면 옛 관계 삭제가 실패하고,
         // 옮겨지지 않은 세트는 다시 그리기 잔량을 잃는다(2026-10-13, docs/CURRENCY_EMOJI_2026-10-13.md §10 4-1)
         move("couple_emoji_sets", "relation_id", oldRelationId, newRelationId);
+        /*
+         * 틀린그림찾기(V143) — relations FK(ON DELETE 없음)라 옮기지 않으면 아래 "옛 관계 삭제"가 FK 위반으로 실패한다.
+         * 새 관계에 같은 날짜 퍼즐이 이미 있으면 (couple_id, puzzle_date) UNIQUE 에 걸리므로 옛 것의 날짜를 비운다(기록은 남는다).
+         */
+        em.createNativeQuery("""
+                        update spot_puzzles set puzzle_date = null
+                        where couple_id = :old
+                          and puzzle_date in (select n.puzzle_date from spot_puzzles n
+                                              where n.couple_id = :new and n.puzzle_date is not null)
+                        """)
+                .setParameter("old", oldRelationId).setParameter("new", newRelationId)
+                .executeUpdate();
+        move("spot_puzzles", "couple_id", oldRelationId, newRelationId);
         // 운동 기록은 개인 소유지만 관계 참조는 되살려준다 (커플 통계에 다시 잡히도록)
         move("workouts", "relation_id", oldRelationId, newRelationId);
 

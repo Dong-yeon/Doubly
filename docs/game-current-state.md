@@ -522,3 +522,62 @@
 표시명 "넷이 같아(가칭)" → **러뷰포**(사용자 결정). 앱 `F/constants/quarto.ts`·서버 `QuartoGame.DISPLAY_NAME` 두 곳. 내부 키 `QUARTO`·웹 경로 `game/four` 는 그대로.
 
 - 2026-10-13 러뷰포 이름: 서버 Railway `64852b97`(커밋 `1ed5afe0`) SUCCESS. 앱 production OTA Android `2d1c2de9`·iOS `58b4fb66` — **소스는 태그 `ota/2026-10-13-loveufour`(= `27e646d2` + 이름 커밋 cherry-pick `1ea2d671`)**. main 의 재화 P1("OTA 보류")을 빼기 위해서다. 다음에 main 에서 OTA 하면 재화 P1 이 같이 나간다.
+
+---
+
+## 12. 사진 틀린그림찾기(내부 키 `SPOT_DIFF`) — 2026-10-14 추가
+
+설계·결정 근거는 `docs/spot-diff-design_2026-10-14.md`. 표시명은 임시값 **"틀린그림찾기"** — 서버 `SpotDiffRules.DISPLAY_NAME`,
+앱 `F/constants/spotDiff.ts` 두 곳. 웹·딥링크 경로 `game/spot-diff`(`PushLinks.GAME_SPOT_DIFF`).
+
+### 12-1. 다른 게임과 다른 점
+
+| 항목 | 다른 게임 | 틀린그림찾기 |
+|---|---|---|
+| 승부 | 승·패·무 | **없음**(사용자 결정). 결과 카드에 두 사람 기록만 나란히. "전적" = 둘 다 끝낸 퍼즐 수(`completedTogether`) |
+| 판 만들기 | 누가 "판 열기" | 서버가 미리 — KST 0시 `SpotDiffScheduler.generateDaily`(+ 목록 GET 때 없으면 그 자리에서). 하루 1판(`SpotDiffRules.MODE`, `UNLIMITED` 로 바꿀 수 있다) |
+| 테이블 | `couple_games` 단일 테이블 | **별도** V143 `spot_puzzles`·`spot_puzzle_plays`·`spot_puzzle_taps`·`spot_puzzle_jobs`·`spot_photo_sizes` |
+| 생성 | 서버 Java | **Python worker**(`worker/spot-diff`, Railway Cron 5분) — SLIC superpixel 이 필요해서 |
+| 진행 | 차례·동시 | 두 사람이 **각자**(비동기). 시간은 서버 `started_at`(화면 열기) → `finished_at` |
+| 만료 | 7일 무활동 접기(기록 안 남음) | **48시간**(`LIFETIME`) 뒤 닫고 결과 공개 + 마감 카드. 원본 사진이 지워지거나 공유가 거둬지면 `PHOTO_REMOVED` 로 닫고 A/B 이미지 삭제 |
+| 재촉·리마인더·반응 | 공통 | **연결 안 함**(`GameNudgeService`·`GameTypeKey` 밖) |
+| 스트릭 | `couple_games.completed_at` | 그대로 + `spot_puzzles.completed_at`(둘 다 끝낸 날) |
+
+### 12-2. API (`/api/v1/games/spot-diff`)
+
+| 메서드 | 경로 | 비고 |
+|---|---|---|
+| GET | `/` | 최근 퍼즐 목록 + `completedTogether`. 오늘 퍼즐이 없으면 만들기 시작(PENDING/NOT_ENOUGH_PHOTOS) |
+| GET | `/{id}` | 한 판(시간을 재지 않는다) |
+| POST | `/{id}/open` | 처음이면 `started_at` 기록. PENDING 409 `SPOT_DIFF_NOT_READY`, 닫힌 판 409 `SPOT_DIFF_CLOSED` |
+| POST | `/{id}/taps` | `{clientTapId, x, y}`(이미지 기준 0~1). HIT/REPEAT/MISS. 같은 키 재전송 = 저장된 결과. 다 찾은 뒤 새 탭 409 `SPOT_DIFF_FINISHED`, 범위 밖 400 `SPOT_DIFF_TAP_RANGE`, 연 적 없음 409 `SPOT_DIFF_NOT_STARTED` |
+| POST | `/{id}/hints` | 못 찾고 힌트 안 받은 차이 하나에 3배 원(중심은 비켜 있음). 다 받았으면 `fresh=false` 로 세지 않음 |
+| GET | `/history` | 끝났거나 닫힌 판 20개 |
+| POST | `/next` | 무제한 모드 전용(일일 모드 409 `SPOT_DIFF_DAILY_ONLY`) |
+
+남의 커플 퍼즐은 403 `GAME_NOT_MEMBER`, 없는 퍼즐 404(러뷰포와 같다).
+
+### 12-3. 판정·블라인드·동시성
+
+- 판정: 픽셀 거리 `√(((x−cx)W)²+((y−cy)H)²) ≤ r·max(W,H) + 0.02·min(W,H)`. 겹친 자리는 새로 찾을 차이가 먼저(`SpotDiffRules.judge`).
+- 블라인드: 응답은 `SpotDiffService.build` 한 곳에서만 만든다. 상대는 `partnerFound`(개수)만, 정답 전체·상대 기록은 `result` 에만 있고
+  `result` 는 둘 다 끝냈거나 닫힌 뒤에만 채운다. `layout_json` 은 DTO 로 나가지 않는다.
+- 동시성: 열기·탭·힌트 전부 퍼즐 행 `findByIdForUpdate`. 목록은 잠그지 않고, 닫아야 하는 판만 `em.refresh(PESSIMISTIC_WRITE)` 뒤 닫는다.
+  방금 닫은 판의 409 는 `ClosedNow`(noRollbackFor) — 닫은 상태가 롤백되지 않게.
+- 푸시: 한 사람이 다 찾으면 상대에게 "다 찾았대요(기록은 둘 다 끝나면)", 둘 다 끝나면 먼저 끝낸 사람에게 "둘 다 찾았어요". 결과 카드는 `GameChatCards`(커밋 뒤).
+
+### 12-4. 앱
+
+- 허브 카드(러뷰포 다음, 아이콘 `image-outline`) → `F/screens/home/SpotDiffScreen.tsx`. 게임 화면이라 탭바 숨김 목록에 넣었다.
+- 판 `F/components/spotdiff/SpotDiffBoard.tsx`: 세로 화면 위아래 / 가로 화면 좌우, 확대·이동을 두 패널에 함께(RNGH runOnJS + RN Animated,
+  AvatarCropSheet 와 같은 방식), 웹용 −/↺/+ 버튼. 좌표 변환은 `F/games/spotDiff/coords.ts`(순수 함수, `scripts/verify-spot-diff.mjs` 44검사).
+- 같은 자리 연타(응답 대기 중, 짧은 변 3% 안)는 보내지 않는다. 응답 없이 끊기면 같은 키로 한 번 더 보낸다.
+- 이미지는 `CachedImage`(expo-image `memory-disk`).
+
+### 12-5. 검증
+
+- 서버: `SpotDiffFlowTest` 15 · `SpotDiffRulesTest` 4. 전체 백엔드 H2 통과, 게임·관계·탈퇴 테스트 PostgreSQL 통과.
+- worker: pytest 25(재현성·정확히 5개·최소 거리·바뀐 픽셀이 정답 원 안·얼굴 영역 무변형·EXIF/GPS 제거·사진 부족·실패·PG 대기열 SKIP LOCKED).
+- 웹(로컬 백엔드 + 로컬 PG): 가로·세로 배치, 확대 상태 탭 정확도, 오답 X, 힌트, 상대 끝남 → 소켓으로 결과 공개, 날짜 칩, 이상 사용(열기·힌트 동시,
+  이상한 탭 값 9종, 동시 첫 목록 → 오늘 판 1개, 남의 퍼즐 403).
+- **확인 못 한 것**: 실기기(두 손가락 확대·끌기 — 웹 자동화의 합성 드래그로는 이동이 일어나지 않았다), 실제 운영 사진·실제 R2 업로드, Railway Cron 실행.

@@ -1,0 +1,5 @@
+tests/
+prototype/
+__pycache__/
+.pytest_cache/
+*.pyc

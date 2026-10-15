@@ -30,5 +30,30 @@ services:
       timeout: 3s
       retries: 10
 
+  # 틀린그림찾기 생성 worker (worker/spot-diff) — 기본 `up` 에는 뜨지 않는다.
+  # 실행:  docker compose --profile worker up --build spot-worker
+  spot-worker:
+    # 이 서비스는 --profile worker 를 줄 때만 뜬다(평소 백엔드 개발에는 필요 없다)
+    profiles: ["worker"]
+    # worker/spot-diff/Dockerfile 로 이미지를 만든다 — 운영(Railway Cron)과 같은 이미지
+    build: ./worker/spot-diff
+    # 로컬에서는 끝내지 않고 30초마다 대기 작업을 다시 본다(운영은 5분마다 새로 떠서 처리하고 끝낸다)
+    command: ["python", "-m", "spot_worker.main", "--loop"]
+    environment:
+      # 위 postgres 서비스 — 컨테이너끼리는 서비스 이름(postgres)과 내부 포트(5432)로 붙는다
+      DATABASE_URL: postgresql://fitto:fitto@postgres:5432/fitto
+      # R2 키는 셸 환경 변수에서 넘긴다(파일에 비밀을 적지 않는다). 비어 있으면 업로드 단계에서 실패한다
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      # 공개 주소·루트 폴더 — 서버(application.yml 의 r2.public-base-url·cloudinary.folder)와 같아야 서버가 지울 수 있다
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-https://media.dubly.co.kr}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-fitto}
+    depends_on:
+      # DB 가 접속을 받을 수 있을 때까지(healthcheck 통과) 기다렸다가 뜬다
+      postgres:
+        condition: service_healthy
+
 volumes:
   fitto-pgdata:

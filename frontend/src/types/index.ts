@@ -2280,3 +2280,73 @@ export interface ExportPage {
   media: { section: string; rowId: number; column: string; url: string; kind: 'IMAGE' | 'AUDIO' }[];
   nextCursor: number | null;
 }
+
+// ── 사진 틀린그림찾기(V143) — docs/spot-diff-design_2026-10-14.md ─────────────
+/** 원(정규화) — cx·cy 는 이미지 기준 0~1, r 은 긴 변 기준 */
+export interface SpotCircle {
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+export type SpotPuzzleStatus = 'PENDING' | 'READY' | 'NOT_ENOUGH_PHOTOS' | 'FAILED' | 'EXPIRED';
+
+export interface SpotRecord {
+  started: boolean;
+  finished: boolean;
+  found: number;
+  elapsedMs: number | null;
+  wrongTaps: number;
+  hintsUsed: number;
+}
+
+/** 퍼즐 — 보는 사람 기준. 정답 전체·상대 기록은 result 에만 있고, result 는 둘 다 끝났거나 닫힌 뒤에만 온다 */
+export interface SpotPuzzle {
+  id: number;
+  status: SpotPuzzleStatus;
+  puzzleDate: string | null;
+  closed: boolean;
+  expireReason: 'TIME' | 'PHOTO_REMOVED' | null;
+  remainingMs: number;
+  imageAUrl: string | null;
+  imageBUrl: string | null;
+  width: number | null;
+  height: number | null;
+  diffCount: number;
+  partnerName: string | null;
+  me: {
+    started: boolean;
+    finished: boolean;
+    found: (SpotCircle & { id: number })[];
+    wrongTaps: number;
+    hintsUsed: number;
+    hints: SpotCircle[];
+    elapsedMs: number;
+  };
+  /** 상대가 찾은 개수 — 블라인드라 위치·시간은 없다 */
+  partnerFound: number;
+  result: {
+    answers: (SpotCircle & { id: number; kind: string })[];
+    me: SpotRecord;
+    partner: SpotRecord;
+  } | null;
+}
+
+export interface SpotDiffList {
+  mode: 'DAILY' | 'UNLIMITED';
+  puzzles: SpotPuzzle[];
+  completedTogether: number;
+}
+
+export interface SpotTapResult {
+  result: 'HIT' | 'REPEAT' | 'MISS';
+  diffId: number | null;
+  circle: SpotCircle | null;
+  puzzle: SpotPuzzle;
+}
+
+export interface SpotHintResult {
+  circle: SpotCircle;
+  fresh: boolean;
+  puzzle: SpotPuzzle;
+}

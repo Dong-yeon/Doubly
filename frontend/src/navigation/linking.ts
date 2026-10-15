@@ -180,6 +180,8 @@ export const linking: LinkingOptions<RootStackParamList> = {
               // PushLinks.GAME_QUARTO — 웹 주소창에 보이므로 내부 키(quarto) 대신 중립적인 경로
               Quarto: 'game/four',
               QuartoPractice: 'game/four/practice',
+              // PushLinks.GAME_SPOT_DIFF
+              SpotDiff: 'game/spot-diff',
               CoupleCalendar: 'calendar',
               My: 'my',
               Settings: 'settings',

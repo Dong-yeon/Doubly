@@ -4,6 +4,7 @@ import com.fitto.common.time.KstClock;
 import com.fitto.game.domain.GameStatus;
 import com.fitto.game.dto.GameStreakResponse;
 import com.fitto.game.repository.CoupleGameRepository;
+import com.fitto.game.repository.SpotPuzzleRepository;
 import com.fitto.relation.domain.Relation;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableSet;
 import java.util.TreeSet;
@@ -35,6 +37,8 @@ public class GameStreakService {
     static final int LOOKBACK_DAYS = 400;
 
     private final CoupleGameRepository gameRepository;
+    /** 틀린그림찾기(V143)는 couple_games 밖에 있다 — 둘 다 끝낸 퍼즐도 "같이 한 날"이다 */
+    private final SpotPuzzleRepository spotPuzzles;
     private final GameCouples couples;
 
     /**
@@ -44,9 +48,11 @@ public class GameStreakService {
     private final ZoneId storageZone;
 
     public GameStreakService(CoupleGameRepository gameRepository,
+                             SpotPuzzleRepository spotPuzzles,
                              GameCouples couples,
                              @Value("${fitto.storage-zone:}") String storageZone) {
         this.gameRepository = gameRepository;
+        this.spotPuzzles = spotPuzzles;
         this.couples = couples;
         this.storageZone = (storageZone == null || storageZone.isBlank())
                 ? ZoneId.systemDefault()
@@ -59,8 +65,9 @@ public class GameStreakService {
         LocalDateTime since = today.minusDays(LOOKBACK_DAYS).atStartOfDay(KstClock.ZONE)
                 .withZoneSameInstant(storageZone).toLocalDateTime();
 
-        List<LocalDateTime> completions =
-                gameRepository.findCompletedAtSince(couple.getId(), GameStatus.COMPLETED, since);
+        List<LocalDateTime> completions = new ArrayList<>(
+                gameRepository.findCompletedAtSince(couple.getId(), GameStatus.COMPLETED, since));
+        completions.addAll(spotPuzzles.findCompletedAtSince(couple.getId(), since));
 
         NavigableSet<LocalDate> days = new TreeSet<>();
         for (LocalDateTime at : completions) {
