@@ -511,6 +511,25 @@ class SpotDiffFlowTest {
     }
 
     @Test
+    void 후보는_일상_먼저_식단은_뒤로_더_최근이어도() throws Exception {
+        long[] c = couple("ka", "kb");
+        for (int i = 0; i < 3; i++) {
+            insertPost(c[2], c[0], "https://res.cloudinary.com/demo/image/upload/v1/fitto/k" + i + UUID.randomUUID() + ".jpg");
+        }
+        // 식단이 더 최근이고 더 많다
+        for (int i = 0; i < 4; i++) {
+            jdbc.update("insert into meals (user_id, meal_date, meal_type, photo_url, created_at) values (?,?,?,?,?)",
+                    c[1], LocalDate.now(), "LUNCH", "https://res.cloudinary.com/demo/image/upload/v1/fitto/m" + i + UUID.randomUUID() + ".jpg",
+                    Timestamp.valueOf(LocalDateTime.now().plusMinutes(5 + i)));
+        }
+        SpotPuzzleResponse today = service.list(c[0]).puzzles().get(0);
+        var candidates = objectMapper.readTree(jobRepository.findByPuzzleId(today.id()).get(0).getCandidates());
+        List<String> types = new ArrayList<>();
+        candidates.forEach(n -> types.add(n.path("type").asText()));
+        assertThat(types).containsExactly("POST", "POST", "POST", "MEAL", "MEAL", "MEAL", "MEAL");
+    }
+
+    @Test
     void 관계를_지우면_퍼즐과_풀이가_함께_지워진다() {
         long[] c = couple("xa", "xb");
         long id = readyPuzzle(c);

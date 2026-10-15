@@ -82,7 +82,10 @@ public class SpotPhotoSources {
                 order by w.created_at desc limit :lim
                 """, p));
 
-        all.sort(Comparator.comparing(Candidate::createdAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        // 우선순위(일상 → 방문·운동 → 식단) 다음 최근 순 — 300장 상한을 식단이 다 채워 일상 사진이 빠지지 않게.
+        // worker(pipeline.TYPE_RANK)도 같은 순위로 고른다
+        all.sort(Comparator.comparingInt((Candidate c) -> rank(c.type()))
+                .thenComparing(Candidate::createdAt, Comparator.nullsLast(Comparator.reverseOrder())));
         Map<String, Candidate> byUrl = new LinkedHashMap<>();
         for (Candidate c : all) {
             if (c.url() == null || c.url().isBlank() || exclude.contains(c.url())) continue;
@@ -129,6 +132,16 @@ public class SpotPhotoSources {
         if (sql == null) return false;
         Long n = jdbc.queryForObject(sql, p, Long.class);
         return n != null && n > 0;
+    }
+
+    /** 출처 우선순위 — 작을수록 먼저(2026-10-15 사용자 결정) */
+    static int rank(String type) {
+        return switch (type) {
+            case "POST" -> 0;
+            case "PLACE_VISIT", "WORKOUT" -> 1;
+            case "MEAL" -> 2;
+            default -> 9;
+        };
     }
 
     private List<Candidate> query(String sql, MapSqlParameterSource p) {
