@@ -47,8 +47,6 @@ public class FoodAnalysisService {
             - portion 과 carbs/protein/fat/sugar/sodium/fiber 는 반드시 채웁니다. 정확히 모르면
               일반적인 값으로 추정하되, 실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다.
               (예: 계란은 지방이 0 이 아니고, 흰쌀밥은 나트륨이 거의 0에 가깝습니다)
-            - totalCalories, totalCarbs, totalProtein, totalFat, totalSugar, totalSodium, totalFiber
-              는 모든 음식의 합계입니다.
             - box 에는 사진에서 그 음식이 있는 위치를 [yMin, xMin, yMax, xMax] 네 정수로 표시합니다.
               값은 사진 전체를 0~1000 으로 정규화한 좌표입니다(왼쪽 위가 0,0). source 가
               PHOTO_FOOD 일 때만 적고, 위치를 특정하기 어려우면 생략해도 됩니다.
@@ -71,8 +69,6 @@ public class FoodAnalysisService {
             - sugar/fiber 는 당류/식이섬유 추정량(그램, g), sodium 은 나트륨 추정량(밀리그램, mg)입니다.
             - carbs/protein/fat/sugar/sodium/fiber 는 반드시 채웁니다. 정확히 모르면 일반적인 값으로
               추정하되, 실제로 거의 없는 경우가 아니면 0 으로 두지 않습니다. (예: 계란은 지방이 0 이 아닙니다)
-            - totalCalories, totalCarbs, totalProtein, totalFat, totalSugar, totalSodium, totalFiber
-              는 모든 음식의 합계입니다.
             - comment 에는 이 식단에 대한 짧고 다정한 한 줄 코멘트를 한국어로 작성합니다.
 
             [메모]
@@ -121,16 +117,14 @@ public class FoodAnalysisService {
                     Map.entry("source", Map.of(
                             "type", "STRING",
                             "enum", List.of("PHOTO_FOOD", "TEXT_IN_PHOTO", "NUTRITION_LABEL"))),
-                    Map.entry("totalCalories", Map.of("type", "INTEGER")),
-                    Map.entry("totalCarbs", Map.of("type", "INTEGER")),
-                    Map.entry("totalProtein", Map.of("type", "INTEGER")),
-                    Map.entry("totalFat", Map.of("type", "INTEGER")),
-                    Map.entry("totalSugar", Map.of("type", "INTEGER")),
-                    Map.entry("totalSodium", Map.of("type", "INTEGER")),
-                    Map.entry("totalFiber", Map.of("type", "INTEGER")),
+                    /*
+                     * 합계(total*)는 모델에게 받지 않는다 — 서버가 항목을 더한다({@link #toResponse}).
+                     * flash-lite 가 마지막 합계 자리에서 "totalSugar": 800000… 처럼 0 을 끝없이 찍다 출력 상한에
+                     * 잘리는 퇴행이 음식 분석 실패의 대부분이었다(server-stability §13, 2026-10-15 초밥 사진 재현).
+                     * 항목에 이미 있는 값을 한 번 더 쓰게 하는 필드라 뺐을 때 잃는 정보도 없다.
+                     */
                     Map.entry("comment", Map.of("type", "STRING"))),
-            "required", List.of("isFood", "foods", "totalCalories",
-                    "totalCarbs", "totalProtein", "totalFat"));
+            "required", List.of("isFood", "foods"));
 
     private static final java.util.Set<String> VALID_SOURCES =
             java.util.Set.of("PHOTO_FOOD", "TEXT_IN_PHOTO", "NUTRITION_LABEL");
@@ -327,13 +321,14 @@ public class FoodAnalysisService {
             return MealAnalysisResponse.notFood();
         }
 
-        int totalCalories = positiveOrSum(result, "totalCalories", foods, AnalyzedFood::calories);
-        int totalCarbs = positiveOrSum(result, "totalCarbs", foods, AnalyzedFood::carbs);
-        int totalProtein = positiveOrSum(result, "totalProtein", foods, AnalyzedFood::protein);
-        int totalFat = positiveOrSum(result, "totalFat", foods, AnalyzedFood::fat);
-        int totalSugar = positiveOrSum(result, "totalSugar", foods, AnalyzedFood::sugar);
-        int totalSodium = positiveOrSum(result, "totalSodium", foods, AnalyzedFood::sodium);
-        int totalFiber = positiveOrSum(result, "totalFiber", foods, AnalyzedFood::fiber);
+        // 합계는 언제나 항목의 합 — 모델에게 받지 않는다(RESPONSE_SCHEMA 주석)
+        int totalCalories = sum(foods, AnalyzedFood::calories);
+        int totalCarbs = sum(foods, AnalyzedFood::carbs);
+        int totalProtein = sum(foods, AnalyzedFood::protein);
+        int totalFat = sum(foods, AnalyzedFood::fat);
+        int totalSugar = sum(foods, AnalyzedFood::sugar);
+        int totalSodium = sum(foods, AnalyzedFood::sodium);
+        int totalFiber = sum(foods, AnalyzedFood::fiber);
         String comment = result.path("comment").asText(null);
         String source = resolveSource(result, defaultSource);
         return new MealAnalysisResponse(true, foods, totalCalories, totalCarbs, totalProtein, totalFat,
@@ -348,11 +343,8 @@ public class FoodAnalysisService {
         return source != null && VALID_SOURCES.contains(source) ? source : defaultSource;
     }
 
-    /** 합계 필드가 비었으면 개별 음식값을 합산해 보정한다. */
-    private int positiveOrSum(JsonNode result, String field, List<AnalyzedFood> foods,
-                              java.util.function.ToIntFunction<AnalyzedFood> extractor) {
-        int total = result.path(field).asInt(0);
-        return total > 0 ? total : foods.stream().mapToInt(extractor).sum();
+    private int sum(List<AnalyzedFood> foods, java.util.function.ToIntFunction<AnalyzedFood> extractor) {
+        return foods.stream().mapToInt(extractor).sum();
     }
 
     /**

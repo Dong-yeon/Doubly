@@ -170,6 +170,8 @@ fitto:
   gemini:
     api-key: ${GEMINI_API_KEY:}
     model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+    # 1차가 계속 실패하거나 결과가 깨졌을 때 묻는 모델 — 모델이 은퇴(404)하면 여기만 바꾸면 된다(GeminiProperties 주석)
+    fallback-model: ${GEMINI_FALLBACK_MODEL:gemini-3.5-flash-lite}
     # 이미지 생성(우리 이모지)은 결제가 붙은 별도 프로젝트 키 — 텍스트 키와 섞지 않는다(GeminiProperties 주석).
     # 미설정 시 텍스트 키로 폴백하지만 그 키가 무료 등급이면 이미지 호출만 실패한다.
     image-api-key: ${GEMINI_IMAGE_API_KEY:}

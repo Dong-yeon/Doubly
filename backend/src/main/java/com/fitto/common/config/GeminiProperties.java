@@ -25,9 +25,14 @@ public class GeminiProperties {
      *
      * <p>운영 로그상 Gemini 오류는 사실상 전부 503(모델 과부하)이다. 그건 <b>같은 모델로
      * 다시 묻는다고 풀리지 않는다</b> — 다른 모델로 넘어가는 게 유일하게 효과 있는 대응이다.
-     * flash-lite 보다 조금 무겁지만 그만큼 덜 붐비는 모델을 기본값으로 둔다.
+     * 1차와 다른 세대의 모델을 기본값으로 둔다.
+     *
+     * <p><b>2026-10-15 gemini-2.5-flash → gemini-3.5-flash-lite.</b> 2.5-flash 가 "신규 사용자에게 제공 중단"으로
+     * 404 를 내면서 폴백이 전부 실패하고 있었다 — 1차 결과가 깨지면(퇴행 출력) 곧바로 사용자 실패였다. 같은 초밥 사진으로
+     * 시험해 3.5-flash-lite 는 2~3초에 같은 음식을 개수로 묶어 정상 응답, 3.1-flash-lite 는 1차와 같은 퇴행으로 잘렸다.
+     * 신규 결제 프로젝트(이미지 키)에서도 쓸 수 있는 모델이다. 운영에서 바꾸려면 {@code GEMINI_FALLBACK_MODEL}.
      */
-    private String fallbackModel = "gemini-2.5-flash";
+    private String fallbackModel = "gemini-3.5-flash-lite";
 
     /**
      * API 베이스 URL. 실사용에서 바꿀 일은 없고, <b>테스트가 실제 구글을 부르지 않게</b>
