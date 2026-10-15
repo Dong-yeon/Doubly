@@ -61,8 +61,18 @@ class ParamTypeMismatchTest {
                 .andExpect(jsonPath("$.success").value(false));
     }
 
+    /** 필수 파라미터를 빼먹어도 400 이다 — 2026-10-15 까지는 500 이었다(지도 둘러보기 이상 입력 점검) */
+    @Test
+    void 필수_파라미터가_없으면_400_이다() throws Exception {
+        mockMvc.perform(get("/api/v1/places/nearby?kind=FOOD&swLat=37.55")
+                        .header("Authorization", bearerOf("mismatch-e@fitto.com")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("필수 값이 빠졌습니다: swLng"));
+    }
+
     /**
-     * 정상 값은 그대로 200 — 핸들러를 붙이면서 멀쩡한 요청을 막지 않았는지 함께 본다.
+     * 정상 값은 그대로 200 —핸들러를 붙이면서 멀쩡한 요청을 막지 않았는지 함께 본다.
      * 사진첩은 커플 스코프 API 라 <b>연결된 커플</b>이 있어야 200 이다(없으면 404).
      */
     @Test

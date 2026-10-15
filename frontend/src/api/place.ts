@@ -125,6 +125,16 @@ export const placeApi = {
   search: (query: string, size = 8) =>
     unwrap(apiClient.get<ApiResponse<PlaceSearchResponse>>('/places/search', { params: { query, size } })),
   /*
+   * 지도 둘러보기 — 보이는 범위 안의 맛집·카페·가볼 만한 곳(카카오 카테고리 검색, 최대 45곳). 응답은 search 와 같은 모양이라
+   * 결과를 그대로 save() 에 넘긴다. 범위 한 변이 약 30km(0.3도)를 넘으면 서버가 400 — 부르기 전에 EXPLORE_MAX_SPAN_DEG 로 거른다.
+   */
+  nearby: (kind: 'FOOD' | 'CAFE' | 'SPOT', b: { sw: { lat: number; lng: number }; ne: { lat: number; lng: number } }) =>
+    unwrap(
+      apiClient.get<ApiResponse<PlaceSearchResponse>>('/places/nearby', {
+        params: { kind, swLat: b.sw.lat, swLng: b.sw.lng, neLat: b.ne.lat, neLng: b.ne.lng },
+      }),
+    ),
+  /*
    * 채팅 지도 링크 → 장소 후보. 칩을 눌렀을 때만 부른다(말풍선이 그려질 때마다 부르지 않는다).
    * messageText 는 링크가 붙어 온 메시지 — 지도 앱 공유 문구의 이름·주소를, 서버가 페이지를 못 읽었을
    * 때 대신 쓴다. 저장은 하지 않는다: 고른 후보를 save() 로 넘긴다.

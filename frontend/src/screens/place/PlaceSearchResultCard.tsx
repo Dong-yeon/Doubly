@@ -19,6 +19,11 @@ interface Props {
   /** 결과 카드를 눌렀다 — 지도에서 그 핀으로 옮긴다(좌표가 없으면 안 준다) */
   onFocus?: () => void;
   onAdd: () => void;
+  /**
+   * [메뉴·정보] — 담기 전에 카카오 상세(메뉴·사진·후기)를 앱 안 브라우저로 본다. 지도 둘러보기에서 고른 한 곳에만 준다:
+   * 처음 보는 가게라 "여기 괜찮나?"를 먼저 확인해야 담을지 정한다. 이름으로 찾은 곳은 이미 아는 곳이라 안 준다.
+   */
+  onInfo?: () => void;
 }
 
 /** 결과 하나를 가리키는 열쇠 — 카카오 id 가 있으면 그것, 없으면 이름+주소 */
@@ -26,7 +31,7 @@ export function searchResultKey(r: PlaceSearchResult): string {
   return r.kakaoPlaceId ?? `${r.name}|${r.address ?? ''}`;
 }
 
-export function PlaceSearchResultCard({ result, saving, onFocus, onAdd }: Props) {
+export function PlaceSearchResultCard({ result, saving, onFocus, onAdd, onInfo }: Props) {
   const info = (
     <>
       <Text style={styles.name} numberOfLines={1}>
@@ -55,13 +60,24 @@ export function PlaceSearchResultCard({ result, saving, onFocus, onAdd }: Props)
       ) : (
         <View style={styles.info}>{info}</View>
       )}
-      <Button
-        title={saving ? '담는 중…' : '럽슐랭에 담기'}
-        size="sm"
-        onPress={onAdd}
-        disabled={saving}
-        accessibilityLabel={`${result.name} 럽슐랭에 담기`}
-      />
+      <View style={styles.actions}>
+        <Button
+          title={saving ? '담는 중…' : '럽슐랭에 담기'}
+          size="sm"
+          onPress={onAdd}
+          disabled={saving}
+          accessibilityLabel={`${result.name} 럽슐랭에 담기`}
+        />
+        {onInfo ? (
+          <Button
+            title="메뉴·정보"
+            size="sm"
+            variant="secondary"
+            onPress={onInfo}
+            accessibilityLabel={`${result.name} 메뉴·정보 보기`}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -82,6 +98,7 @@ const styles = themedStyles((colors) => ({
   },
   info: { flex: 1, gap: spacing.xxs },
   pressed: { opacity: 0.7 },
+  actions: { gap: spacing.xs, alignItems: 'stretch' },
   name: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary },
   category: { fontSize: fontSize.caption, color: colors.textSecondary, fontWeight: '600' },
   address: { fontSize: fontSize.caption, color: colors.textSecondary },

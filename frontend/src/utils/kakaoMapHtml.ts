@@ -17,6 +17,16 @@ export interface KakaoMapMarker {
   lat: number;
   lng: number;
   title: string;
+  /**
+   * false 면 이름표를 안 붙인다(고른 핀이면 붙인다) — 럽슐랭 지도 "둘러보기" 핀. 수십 곳의 이름이 우리 핀 이름을 덮는다.
+   * 미지정 = 붙인다(기존 동작).
+   */
+  label?: boolean;
+  /**
+   * false 면 핀 묶기(MarkerClusterer)에서 빼고 개수에도 안 센다 — 둘러보기 핀 45곳이 우리 핀까지 묶음 속으로 끌고 가지 않게.
+   * 미지정 = 묶는다(기존 동작).
+   */
+  cluster?: boolean;
   /** 커스텀 핀 색상(hex) — 미지정 시 카카오 기본(빨강) 핀 */
   color?: string;
   /** color 지정 시에만 의미 있음 — false 면 속이 빈 테두리 핀(예: 위시리스트). 미지정 시 채워진 핀(기존 동작 유지) */
@@ -162,27 +172,42 @@ export function buildPlacePinIcons(palette: { gold: string; visited: string; sea
       (c, r) => `<circle cx="${c}" cy="${c}" r="${r}" fill="#ffffff" stroke="${palette.visited}" stroke-width="${3 * scale}"/>`,
     );
     // 검색 결과 — 물방울(꼬리 끝이 좌표). 원 핀과 실루엣이 달라 "아직 우리 장소가 아님"이 보인다
-    const w = Math.round(26 * scale);
-    const h = Math.round(34 * scale);
-    const cx = w / 2;
-    const r = 10 * scale;
-    const cy = r + 2 * scale;
-    const d =
-      `M${cx} ${h - 1} C ${cx - 3 * scale} ${cy + r * 0.9}, ${cx - r} ${cy + r * 0.55}, ${cx - r} ${cy} ` +
-      `A ${r} ${r} 0 1 1 ${cx + r} ${cy} C ${cx + r} ${cy + r * 0.55}, ${cx + 3 * scale} ${cy + r * 0.9}, ${cx} ${h - 1} Z`;
-    icons[`search${suffix}`] = {
-      url: svgUri(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
-          `<path d="${d}" fill="${palette.search}" stroke="#ffffff" stroke-width="${2 * scale}"/>` +
-          `<circle cx="${cx}" cy="${cy}" r="${3.5 * scale}" fill="#ffffff"/></svg>`,
-      ),
-      width: w,
-      height: h,
-      anchorX: cx,
-      anchorY: h - 1,
-    };
+    dropPin(icons, `search${suffix}`, scale, palette.search);
+    // 둘러보기 — 같은 물방울을 조금 작게, 업종 색으로. 수십 개가 깔리므로 우리 핀보다 눈에 덜 띄어야 한다
+    for (const [kind, color] of Object.entries(EXPLORE_PIN_COLORS)) {
+      dropPin(icons, `explore-${kind}${suffix}`, scale * 0.82, color);
+    }
   }
   return icons;
+}
+
+/**
+ * 둘러보기 핀 색 — 업종별. 지도 앱들이 쓰는 관례(음식점 주황·카페 갈색·명소 초록)라 테마 팔레트를 따르지 않는다.
+ * 우리 핀(코랄·하늘·금색)·검색 핀(잉크)과 겹치지 않는 색이다. 키는 PlaceScreen 의 둘러보기 종류(food·cafe·spot).
+ */
+export const EXPLORE_PIN_COLORS = { food: '#EF6C00', cafe: '#8D6E63', spot: '#2E7D32' } as const;
+
+/** 물방울 핀(꼬리 끝이 좌표) — 검색 결과·둘러보기 */
+function dropPin(icons: Record<string, KakaoPinIcon>, key: string, scale: number, fill: string) {
+  const w = Math.round(26 * scale);
+  const h = Math.round(34 * scale);
+  const cx = w / 2;
+  const r = 10 * scale;
+  const cy = r + 2 * scale;
+  const d =
+    `M${cx} ${h - 1} C ${cx - 3 * scale} ${cy + r * 0.9}, ${cx - r} ${cy + r * 0.55}, ${cx - r} ${cy} ` +
+    `A ${r} ${r} 0 1 1 ${cx + r} ${cy} C ${cx + r} ${cy + r * 0.55}, ${cx + 3 * scale} ${cy + r * 0.9}, ${cx} ${h - 1} Z`;
+  icons[key] = {
+    url: svgUri(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+        `<path d="${d}" fill="${fill}" stroke="#ffffff" stroke-width="${2 * scale}"/>` +
+        `<circle cx="${cx}" cy="${cy}" r="${3.5 * scale}" fill="#ffffff"/></svg>`,
+    ),
+    width: w,
+    height: h,
+    anchorX: cx,
+    anchorY: h - 1,
+  };
 }
 
 /** 고른 핀이면 `-selected` 짝 키 — 짝이 없으면 원래 키, 키가 없으면 null(기존 color 핀) */
@@ -367,7 +392,8 @@ kakao.maps.load(function () {
     drawn = [];
     labels = [];
     if (clusterer) { clusterer.clear(); }
-    clustering = markers.length >= ${CLUSTER_MIN_MARKERS} && !!kakao.maps.MarkerClusterer;
+    clustering = markers.filter(function (m) { return m.cluster !== false; }).length >= ${CLUSTER_MIN_MARKERS} &&
+      !!kakao.maps.MarkerClusterer;
     var clustered = [];
 
     var bounds = new kakao.maps.LatLngBounds();
@@ -381,7 +407,8 @@ kakao.maps.load(function () {
         }));
       } else {
         // 묶을 때는 지도에 직접 올리지 않고 clusterer 에 맡긴다
-        var markerOpts = { map: clustering ? null : map, position: pos, title: m.title };
+        var inCluster = clustering && m.cluster !== false;
+        var markerOpts = { map: inCluster ? null : map, position: pos, title: m.title };
         var ic = iconImage(m);
         if (ic) { markerOpts.image = ic; }
         else if (m.color) { markerOpts.image = pinImage(m.color, m.filled !== false, m.tier || 0); }
@@ -389,8 +416,9 @@ kakao.maps.load(function () {
         var marker = new kakao.maps.Marker(markerOpts);
         kakao.maps.event.addListener(marker, 'click', function () { post({ type: 'marker', id: m.id }); });
         drawn.push(marker);
-        if (clustering) { clustered.push(marker); }
+        if (inCluster) { clustered.push(marker); }
       }
+      if (m.label === false && !m.selected) { return; }
       var label = new kakao.maps.CustomOverlay({
         map: null, position: pos, yAnchor: 0,
         content: '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:2px 8px;' +

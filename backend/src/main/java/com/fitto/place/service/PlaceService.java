@@ -135,6 +135,60 @@ public class PlaceService {
     }
 
     /**
+     * 지도 둘러보기 업종 — 앱의 칩 하나가 카카오 업종 코드 몇 개를 묶는다. "가볼 만한 곳"은 관광명소 + 문화시설.
+     * 업종이 둘이면 쪽수를 나눠 한 번에 부르는 카카오 호출 수를 비슷하게 맞춘다(최대 3~4번).
+     */
+    public enum NearbyKind {
+        FOOD(List.of("FD6"), 3),
+        CAFE(List.of("CE7"), 3),
+        SPOT(List.of("AT4", "CT1"), 2);
+
+        final List<String> groupCodes;
+        final int pagesPerCode;
+
+        NearbyKind(List<String> groupCodes, int pagesPerCode) {
+            this.groupCodes = groupCodes;
+            this.pagesPerCode = pagesPerCode;
+        }
+    }
+
+    /**
+     * 둘러보기 범위 한 변의 상한(도) — 약 30km. 그보다 넓으면 카카오가 45곳을 전국에 흩뿌려 줘서 "주변"이 아니다.
+     * 앱은 이보다 넓게 보고 있으면 부르지 않고 "지도를 당겨 주세요"를 띄운다 — 여기는 그 약속을 지키게 하는 문턱이다.
+     */
+    static final double NEARBY_MAX_SPAN_DEG = 0.3;
+
+    /**
+     * 지도 둘러보기 — 보이는 범위 안의 맛집·카페·가볼 만한 곳(카카오 카테고리 검색). 응답 모양은 이름 검색과 같아
+     * 앱이 결과 핀·[럽슐랭에 담기]를 그대로 쓴다. 우리가 이미 담은 곳을 빼는 건 앱이 한다(목록을 이미 들고 있다).
+     * 이름 검색과 같은 이유로 게이팅하지 않는다 — 담는 순간 PLACE_PIN 한도가 걸린다.
+     */
+    public PlaceSearchResponse nearby(NearbyKind kind, double swLat, double swLng, double neLat, double neLng) {
+        if (!(swLat < neLat) || !(swLng < neLng)
+                || swLat < -90 || neLat > 90 || swLng < -180 || neLng > 180
+                || neLat - swLat > NEARBY_MAX_SPAN_DEG || neLng - swLng > NEARBY_MAX_SPAN_DEG) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        if (!kakaoLocalClient.isConfigured()) {
+            return PlaceSearchResponse.unavailable();
+        }
+        // 업종 둘(관광명소·문화시설)에 같은 곳이 겹쳐 올 수 있다 — 카카오 id 로 한 번만
+        Map<String, KakaoPlace> unique = new java.util.LinkedHashMap<>();
+        for (String code : kind.groupCodes) {
+            for (KakaoPlace k : kakaoLocalClient.searchCategory(code, swLat, swLng, neLat, neLng, kind.pagesPerCode)) {
+                if (k.lat() == null || k.lng() == null) continue; // 지도에 못 찍는 결과는 둘러보기에 쓸모가 없다
+                unique.putIfAbsent(k.id() != null ? k.id() : k.name() + "|" + k.address(), k);
+            }
+        }
+        List<PlaceSearchResponse.PlaceSearchResult> results = unique.values().stream()
+                .map(k -> new PlaceSearchResponse.PlaceSearchResult(
+                        k.id(), k.name(), k.address(), k.category(), k.lat(), k.lng(), k.placeUrl(),
+                        k.categoryDetail(), k.phone(), PlaceLinks.detailUrl(k.id())))
+                .toList();
+        return new PlaceSearchResponse(true, results);
+    }
+
+    /**
      * 장소 등록 (PLACE-01) — 이미 같은 커플이 등록해둔 장소면 새로 만들지 않고 그 장소를
      * 그대로 돌려준다({@link #findExisting}). 식단 기록 화면처럼 카카오 검색 결과를 그대로
      * 저장하는 경로에서, 이미 등록된 맛집을 다시 검색해 추가할 때 똑같은 장소가 중복

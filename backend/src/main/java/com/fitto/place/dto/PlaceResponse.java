@@ -41,6 +41,8 @@ public record PlaceResponse(
         String phone,
         /** 카카오 상세 링크 — 저장하지 않고 kakao_place_id 로 만든다(PlaceLinks). 없으면 null(앱이 검색 URL 로 대신 연다) */
         String detailUrl,
+        /** 카카오 장소 id — 앱 지도 둘러보기가 "이미 담은 곳"을 결과에서 뺀다. 직접 추가한 곳은 null */
+        String kakaoPlaceId,
         /**
          * 저장(POST /places) 응답에만 실린다 — true 면 새로 만든 장소, false 면 같은 커플에 이미 있던
          * 장소를 돌려준 것이다(중복 방지). 목록·상세 등 다른 응답에서는 null 이라 직렬화되지 않는다.
@@ -56,13 +58,14 @@ public record PlaceResponse(
                 visitCount, avgRating, lastVisitedAt, myRating, partnerRating,
                 p.getLovelichelinTier(), p.getLovelichelinCertifiedAt(),
                 coverImageUrl, coverMemo, p.getCreatedAt(), p.getCategoryDetail(), p.getPhone(),
-                com.fitto.place.service.PlaceLinks.detailUrl(p.getKakaoPlaceId()), null);
+                com.fitto.place.service.PlaceLinks.detailUrl(p.getKakaoPlaceId()),
+                p.getKakaoPlaceId(), null);
     }
 
     /** 저장 응답 — 새로 만들었는지(created) 를 함께 싣는다 */
     public PlaceResponse withCreated(boolean created) {
         return new PlaceResponse(id, name, address, lat, lng, category, addedBy, tripId, visitCount, avgRating,
                 lastVisitedAt, myRating, partnerRating, lovelichelinTier, lovelichelinCertifiedAt,
-                coverImageUrl, coverMemo, createdAt, categoryDetail, phone, detailUrl, created);
+                coverImageUrl, coverMemo, createdAt, categoryDetail, phone, detailUrl, kakaoPlaceId, created);
     }
 }
