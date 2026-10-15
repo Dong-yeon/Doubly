@@ -585,5 +585,9 @@
 ### 12-6. 배포 기록
 
 - 2026-10-15 서버: main `b9b009a1` → Railway `d4397d32` SUCCESS, 운영 DB **V143 적용**, `/api/v1/games/spot-diff` 401(경로 존재) 확인.
-- worker: Railway Cron 서비스 신설 전(사용자 작업 — `worker/spot-diff/README.md`). 그 전까지 0시 퍼즐은 PENDING 으로 쌓였다가 48시간 뒤 닫힌다(앱이 아직 없어 사용자에게 보이지 않는다).
-- 앱: OTA 전.
+- worker: 2026-10-15 Railway Cron 서비스 `Doubly-SpotWorker` 신설(Root `/worker/spot-diff`, Builder Dockerfile, `*/5 * * * *`, 변수는 `${{Doubly-Back.R2_*}}` 참조).
+  첫 배포는 변수 적용 전 실행이라 `KeyError: R2_ACCOUNT_ID` 로 CRASHED, 변수 적용 뒤 `3890df7a` 10:30 실행 정상(`작업 0건 처리`).
+  주의: 서비스를 GitHub 저장소로 바로 만들면 루트 Dockerfile(백엔드)로 빌드돼 백엔드가 하나 더 뜬다 — 빈 서비스로 만들고 설정 뒤 배포했다.
+- 앱: 2026-10-15 production OTA — 소스는 **태그 `ota/2026-10-15-spot-diff`(= `ota/2026-10-14-photo-profile` + 앱 커밋 cherry-pick `df65823e`)**,
+  재화 P1(OTA 보류) 제외. fingerprint 1.0.7 과 일치(Android `700b96c0`, iOS `d75619b0`). update group Android `4fede547`, iOS `a1434758`.
+- 아직: 실제 사진으로 만든 첫 퍼즐(worker READY)·R2 업로드·실기기 확인.
