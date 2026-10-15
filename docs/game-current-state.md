@@ -591,3 +591,11 @@
 - 앱: 2026-10-15 production OTA — 소스는 **태그 `ota/2026-10-15-spot-diff`(= `ota/2026-10-14-photo-profile` + 앱 커밋 cherry-pick `df65823e`)**,
   재화 P1(OTA 보류) 제외. fingerprint 1.0.7 과 일치(Android `700b96c0`, iOS `d75619b0`). update group Android `4fede547`, iOS `a1434758`.
 - 아직: 실제 사진으로 만든 첫 퍼즐(worker READY)·R2 업로드·실기기 확인.
+
+**첫 실사용 장애 (2026-10-15 오전)**: 사용자 화면에 "오늘은 퍼즐을 만들지 못했어요(사진이 단순하면…)". 실제로는 생성은 성공했고
+**R2 업로드에서 실패**했다 — Railway 의 `R2_ACCESS_KEY_ID` 값 끝에 줄바꿈이 있어 botocore 가 서명 헤더를 거절(`Invalid header value`).
+서버 `R2Properties` 는 trim 하고 있었고 worker 만 그대로 썼다. 작업 3번 실패 → FAILED, 앱 문구는 FAILED 를 전부 사진 탓으로 안내했다.
+- 수정: worker 환경 변수 trim(`b72489b9`), FAILED 판은 목록을 열 때 다시 만들기(판당 작업 3개까지, `348d4fc5`),
+  실패 문구에서 사진 탓 제거 + [다시 만들기](`54403393`). 서버·worker Railway SUCCESS(11:08), 앱 OTA 소스 태그 `ota/2026-10-15-spot-diff-2`
+  (update group Android `64d66855`, iOS `60fe0268`).
+- 교훈: 비밀 값을 다른 서비스에서 참조할 때 원본에 붙은 공백·줄바꿈까지 따라온다. 새 실행 환경은 읽는 쪽에서 다듬는다.
