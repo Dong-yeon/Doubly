@@ -298,6 +298,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
                 ? 'diet'
                 : { path: 'diet', alias: ['workout', 'workout/voice-clips'] },
               DietRecord: 'diet/record',
+              HabitReport: 'diet/habits',
               DietCalendar: 'diet/calendar',
               DietStats: 'diet/stats',
               // 식단 기록에서 연 장소 화면 — 럽슐랭 탭에도 같은 화면이 있지만 경로는 나눈다

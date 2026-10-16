@@ -20,7 +20,7 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../../utils/alert';
-import { useFastingSignal } from '../../utils/mealFasting';
+import { formatFastingDuration, useFastingSignal } from '../../utils/mealFasting';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -43,6 +43,7 @@ import { dietApi } from '../../api/diet';
 import { analyticsApi } from '../../api/analytics';
 import { waterApi } from '../../api/water';
 import { fastingApi } from '../../api/fasting';
+import { habitsApi } from '../../api/habits';
 import { summaryApi } from '../../api/summary';
 import { streakApi } from '../../api/streak';
 import { getErrorMessage } from '../../utils/error';
@@ -67,6 +68,7 @@ import type {
   FastingPlan,
   FastingSettings,
   FastingStatus,
+  HabitInsights,
   MacroPreset,
   Meal,
   NutritionGoalSuggestion,
@@ -236,6 +238,14 @@ function FastingActiveRow({
  * 지방을 주로 쓰기 시작하는 "대사 스위치"는 연구상 12~36시간으로 사람마다 크게 다르다. 자가포식·해독 같은
  * 시간표는 사람에게서 확인되지 않아 쓰지 않는다. 물은 단식 중에도 괜찮다는 말을 함께 둔다.
  */
+/** 지난 단식이 오늘(KST) 끝났나 — 응답 시각은 UTC(Z), today 는 서버가 준 KST 날짜 */
+function lastFastEndedToday(insights: HabitInsights): boolean {
+  const ended = insights.lastFast?.endedAt;
+  if (!ended) return false;
+  const kstDate = new Date(new Date(ended).getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+  return kstDate === insights.today;
+}
+
 function fastingStage(elapsedMin: number): string {
   if (elapsedMin < 4 * 60) return '먹은 걸 소화하는 중이에요 · 물은 마셔도 괜찮아요';
   if (elapsedMin < 12 * 60) return '저장해 둔 당을 꺼내 쓰는 중이에요 · 물 한 잔 어때요?';
@@ -439,6 +449,7 @@ export function DietScreen({ navigation, route }: Props) {
   const [fastingModal, setFastingModal] = useState(false);
   const [fastingBusy, setFastingBusy] = useState(false);
   const [customHours, setCustomHours] = useState('16');
+  const [insights, setInsights] = useState<HabitInsights | null>(null);
   const [fastingState, setFastingState] = useState<LoadState>('loading');
   const refreshFasting = useCallback(() => {
     fastingApi
@@ -450,7 +461,35 @@ export function DietScreen({ navigation, route }: Props) {
       .catch(() => setFastingState((st) => (st === 'ok' ? 'ok' : 'error')));
     // 상대 진행 상태는 곁들이는 정보라 실패해도 줄을 비우기만 한다
     fastingApi.partner().then(setPartnerFasting).catch(() => setPartnerFasting(null));
+    // 지난 단식 결과 줄(이번 주 n번째·연속)도 리포트 응답에서 — 실패하면 그 줄만 숨긴다
+    habitsApi.insights().then(setInsights).catch(() => setInsights(null));
   }, []);
+  // 물 목표 바꾸기 — 숫자를 누르면 연다(예전엔 API 만 있고 바꿀 곳이 없었다)
+  const [waterGoalModal, setWaterGoalModal] = useState(false);
+  const [waterGoalInput, setWaterGoalInput] = useState('');
+  const [waterGoalBusy, setWaterGoalBusy] = useState(false);
+  // 칩 연타 — 렌더 전 두 번째 누름은 busy 상태를 아직 못 본다. ref 로 막아 요청이 하나만 나가게(화면·서버 어긋남 방지)
+  const waterGoalSaving = useRef(false);
+  const onSaveWaterGoal = async (ml: number) => {
+    if (waterGoalSaving.current) return;
+    if (!Number.isFinite(ml) || ml < 500 || ml > 10000) {
+      toast.error('물 목표는 500~10,000ml 사이로 정해 주세요.');
+      return;
+    }
+    waterGoalSaving.current = true;
+    setWaterGoalBusy(true);
+    try {
+      setWater(await waterApi.setGoal(Math.round(ml)));
+      haptics.success();
+      setWaterGoalModal(false);
+      toast.success(`물 목표를 ${formatNumber(Math.round(ml))}ml 로 바꿨어요`);
+    } catch (e) {
+      toast.error(getErrorMessage(e, '물 목표를 바꾸지 못했어요.'));
+    } finally {
+      waterGoalSaving.current = false;
+      setWaterGoalBusy(false);
+    }
+  };
   // 식사 기록 뒤 되돌리기·시작 제안처럼 이 화면 밖에서 단식이 바뀌면 다시 받는다(utils/mealFasting)
   const fastingSignal = useFastingSignal((s) => s.version);
   useEffect(() => {
@@ -1016,7 +1055,16 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
               <View style={styles.trackerCard}>
                 {water ? (
                   <View style={styles.trackerRow}>
-                    <View style={styles.trackerText}>
+                    {/* 숫자를 누르면 목표를 바꾼다 — 2L 를 정답처럼 두지 않는다(분석 문서 §2-3) */}
+                    <Pressable
+                      style={({ pressed }) => [styles.trackerText, pressed && styles.trackerRowPressed]}
+                      onPress={() => {
+                        setWaterGoalInput(String(water.targetMl));
+                        setWaterGoalModal(true);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`물 ${formatNumber(water.consumedMl)}ml, 목표 ${formatNumber(water.targetMl)}ml. 목표 바꾸기`}
+                    >
                       <Text style={styles.trackerTitle}>
                         물{'  '}
                         <Text style={styles.trackerValue}>
@@ -1026,7 +1074,7 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
                       {water.coupleConnected ? (
                         <Text style={styles.trackerSub}>상대 {formatNumber(water.partnerConsumedMl ?? 0)}ml</Text>
                       ) : null}
-                    </View>
+                    </Pressable>
                     <View style={styles.stepper}>
                       <Pressable
                         style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed, water.consumedMl <= 0 && styles.stepBtnDisabled]}
@@ -1078,6 +1126,34 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
                     <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                   </Pressable>
                 )}
+                {/* 지난 단식 결과 — 오늘 끝난 단식만. 진행 중이면 위 줄이 그 자리다 */}
+                {!fasting?.active && insights?.lastFast && lastFastEndedToday(insights) ? (
+                  <Text style={styles.fastResult}>
+                    {insights.lastFast.achieved
+                      ? `🎉 지난 단식 ${formatFastingDuration(insights.lastFast.elapsedMin)} 달성` +
+                        (insights.lastFast.achievedThisWeek > 0 ? ` · 이번 주 ${insights.lastFast.achievedThisWeek}번째` : '') +
+                        (insights.achievedStreak > 1 ? ` · ${insights.achievedStreak}일 연속` : '')
+                      : `지난 단식 ${formatFastingDuration(insights.lastFast.elapsedMin)} (목표 ${insights.lastFast.targetHours}시간)`}
+                  </Text>
+                ) : null}
+
+                <View style={styles.trackerDivider} />
+                <Pressable
+                  style={({ pressed }) => [styles.reportRow, pressed && styles.trackerRowPressed]}
+                  onPress={() => navigation.navigate('HabitReport')}
+                  accessibilityRole="button"
+                  accessibilityLabel="물·단식 리포트 보기"
+                >
+                  <View style={styles.trackerText}>
+                    <Text style={styles.reportText}>물·단식 리포트</Text>
+                    {insights ? (
+                      <Text style={styles.trackerSub}>
+                        최근 7일 단식 {insights.thisWeek.achievedCount}번 달성 · 물 목표 {insights.thisWeek.waterGoalDays}일 채움
+                      </Text>
+                    ) : null}
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+                </Pressable>
               </View>
             )}
 
@@ -1504,6 +1580,47 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
           </Pressable>
         </Pressable>
       </Modal>
+      {/* 물 목표 바꾸기 — 칩은 바로 저장, 직접 입력은 500~10,000ml(서버 SetWaterGoalRequest 와 같은 범위) */}
+      <Modal visible={waterGoalModal} transparent animationType="fade" onRequestClose={() => setWaterGoalModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setWaterGoalModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>하루 물 목표</Text>
+            <Text style={styles.modalDesc}>몸집·활동량·날씨에 따라 달라요. 나에게 맞게 정해 보세요.</Text>
+            <View style={styles.wizardChipRow}>
+              {[1500, 2000, 2500, 3000].map((ml) => (
+                <TouchableOpacity
+                  key={ml}
+                  style={[styles.wizardChip, water?.targetMl === ml && styles.wizardChipActive]}
+                  disabled={waterGoalBusy}
+                  onPress={() => onSaveWaterGoal(ml)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`물 목표 ${formatNumber(ml)}ml`}
+                >
+                  <Text style={[styles.wizardChipText, water?.targetMl === ml && styles.wizardChipTextActive]}>
+                    {(ml / 1000).toFixed(1)}L
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.customFastingRow}>
+              <View style={styles.customFastingInput}>
+                <TextField
+                  label="직접 입력 (ml)"
+                  value={waterGoalInput}
+                  onChangeText={(t) => setWaterGoalInput(t.replace(/[^0-9]/g, '').slice(0, 5))}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <Button
+                title="저장"
+                onPress={() => onSaveWaterGoal(Number(waterGoalInput))}
+                loading={waterGoalBusy}
+                style={styles.customFastingBtn}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <CopyYesterdaySheet
         visible={copySheetOpen}
         onClose={() => setCopySheetOpen(false)}
@@ -1627,6 +1744,9 @@ const styles = themedStyles((colors) => ({
   trackerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
   trackerRowPressed: { opacity: 0.7 },
   trackerDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.sm },
+  fastResult: { fontSize: fontSize.caption, color: colors.meText, fontWeight: '700', marginTop: spacing.xs },
+  reportRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36 },
+  reportText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   trackerText: { flex: 1, minWidth: 0 },
   trackerTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   trackerValue: { fontWeight: '600', color: colors.textSecondary },

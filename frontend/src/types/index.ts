@@ -1487,6 +1487,58 @@ export interface FastingHistoryItem {
   achieved: boolean;
 }
 
+/**
+ * 물·단식 리포트 (GET /habits/insights) — 최근 28일(KST), 무료. 단식은 <b>끝난 날</b>에 붙는다.
+ * 몸속 추정은 없고 본인 기록 비교만 — 칼로리 비교는 "관찰된 차이"로만 말한다.
+ */
+export interface HabitDay {
+  date: string;
+  waterMl: number;
+  /** 그날 끝난 단식 중 가장 긴 공복(분), 없으면 null */
+  fastMin?: number | null;
+  fastAchieved: boolean;
+  /** 칼로리가 적힌 기록이 하나도 없으면 null(0kcal 과 구분) */
+  calories?: number | null;
+  weightKg?: number | null;
+  /** 커플이 아니면 null */
+  partnerAchieved?: boolean | null;
+}
+
+export interface HabitWeek {
+  fastCount: number;
+  achievedCount: number;
+  avgFastMin?: number | null;
+  waterGoalDays: number;
+  avgWaterMl: number;
+}
+
+export interface HabitInsights {
+  today: string;
+  waterTargetMl: number;
+  days: HabitDay[];
+  thisWeek: HabitWeek;
+  lastWeek: HabitWeek;
+  comparison: {
+    enough: boolean;
+    fastDays: number;
+    fastDayAvgCalories?: number | null;
+    otherDays: number;
+    otherDayAvgCalories?: number | null;
+    weightCount: number;
+    weightChangeKg?: number | null;
+  };
+  lastFast?: {
+    elapsedMin: number;
+    targetHours: number;
+    achieved: boolean;
+    endedAt: string;
+    endedBy?: FastingEndReason | null;
+    achievedThisWeek: number;
+  } | null;
+  achievedStreak: number;
+  couple: { connected: boolean; partnerName?: string | null; bothDays: number; bothStreak: number };
+}
+
 // 단식 연동 설정 (GET·PUT /fasting/settings)
 export interface FastingSettings {
   /** 식사를 기록하면 진행 중인 단식을 자동으로 끝낸다 */

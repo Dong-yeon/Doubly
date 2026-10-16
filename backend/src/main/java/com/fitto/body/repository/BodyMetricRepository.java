@@ -11,6 +11,10 @@ public interface BodyMetricRepository extends JpaRepository<BodyMetric, Long> {
     /** 그래프용 — 오래된 것부터(시간순) */
     List<BodyMetric> findByUserIdOrderByMeasuredDateAscIdAsc(Long userId);
 
+    /** 기간 그래프용(물·단식 리포트의 체중 겹쳐 보기) — 오래된 것부터 */
+    List<BodyMetric> findByUserIdAndMeasuredDateBetweenOrderByMeasuredDateAscIdAsc(
+            Long userId, java.time.LocalDate start, java.time.LocalDate end);
+
     Optional<BodyMetric> findByIdAndUserId(Long id, Long userId);
 
     /** 가장 최근 체중 — 에너지 밸런스(기초대사량) 계산용 */

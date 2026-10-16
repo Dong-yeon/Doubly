@@ -13,6 +13,7 @@ import { DietScreen } from '../screens/diet/DietScreen';
 import { DietRecordScreen } from '../screens/diet/DietRecordScreen';
 import { DietCalendarScreen } from '../screens/diet/DietCalendarScreen';
 import { DietStatsScreen } from '../screens/diet/DietStatsScreen';
+import { HabitReportScreen } from '../screens/diet/HabitReportScreen';
 import { BarcodeScanScreen } from '../screens/diet/BarcodeScanScreen';
 import { FavoriteFoodGiftInboxScreen } from '../screens/diet/FavoriteFoodGiftInboxScreen';
 import { WorkoutScreen } from '../screens/workout/WorkoutScreen';
@@ -53,6 +54,7 @@ export function HealthStackNavigator() {
       />
       <Stack.Screen name="DietCalendar" component={DietCalendarScreen} options={{ title: '식단 캘린더' }} />
       <Stack.Screen name="DietStats" component={DietStatsScreen} options={{ title: '식단 통계' }} />
+      <Stack.Screen name="HabitReport" component={HabitReportScreen} options={{ title: '물·단식 리포트' }} />
       <Stack.Screen
         name="BarcodeScan"
         component={BarcodeScanScreen}

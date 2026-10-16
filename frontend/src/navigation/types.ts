@@ -242,6 +242,8 @@ export type DietStackParamList = {
    * 바뀌는 수(Date.now())라, 이미 떠 있는 화면에 다시 와도 한 번 더 펼쳐진다.
    */
   DietMain: { checkin?: number } | undefined;
+  /** 물·단식 리포트 — 최근 4주 본인 기록 비교(2026-10-16, 무료) */
+  HabitReport: undefined;
   /*
    * 럽슐랭 탭과 공유하는 장소 상세 — 식단 기록에 붙은 장소를 탭했을 때 이 스택에 그대로
    * 쌓는다(크로스탭으로 보내면 뒤로가기가 식단 목록으로 안 돌아온다 — PlaceScreensParamList
