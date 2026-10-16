@@ -81,6 +81,12 @@ public class FastingService {
 
     @Transactional
     public FastingStatusResponse start(Long userId, StartFastingRequest req) {
+        /*
+         * 사용자 행을 잠가 시작을 한 줄로 세운다 — "있나 보고 넣기"만으로는 두 기기·저녁 제안과 모달이 겹친 동시 시작이
+         * 둘 다 "없다"고 보고 진행 중 단식을 두 개 만들었다(docs/HOME_FASTING_TIMER_ANALYSIS_2026-10-16.md §6-1).
+         * 부분 유니크 인덱스(ended_at IS NULL)는 H2 가 못 받아 쓰지 않는다.
+         */
+        lockUser(userId);
         if (repository.existsByUserIdAndEndedAtIsNull(userId)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 진행 중인 단식이 있어요.");
         }
@@ -103,7 +109,8 @@ public class FastingService {
 
     @Transactional
     public FastingStatusResponse end(Long userId) {
-        FastingSession session = repository.findByUserIdAndEndedAtIsNull(userId)
+        lockUser(userId); // 두 번 눌러도 끝내기·축하 푸시는 한 번
+        FastingSession session = repository.findFirstByUserIdAndEndedAtIsNullOrderByIdDesc(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "진행 중인 단식이 없어요."));
         return finish(userId, session, LocalDateTime.now(), FastingEndReason.MANUAL);
     }
@@ -128,7 +135,7 @@ public class FastingService {
         }
         NutritionGoal goal = nutritionGoalRepository.findById(userId).orElse(null);
 
-        Optional<FastingSession> active = repository.findByUserIdAndEndedAtIsNull(userId);
+        Optional<FastingSession> active = repository.findFirstByUserIdAndEndedAtIsNullOrderByIdDesc(userId);
         if (active.isPresent()) {
             if (goal != null && !goal.fastingAutoEndOrDefault()) {
                 return null;
@@ -158,6 +165,7 @@ public class FastingService {
     /** 식사 기록으로 끝난 단식을 되돌린다 — 끝난 지 {@value #REOPEN_WINDOW_MINUTES}분 안, 그 뒤 새 단식이 없을 때만. */
     @Transactional
     public FastingStatusResponse reopen(Long userId) {
+        lockUser(userId); // 되돌리기와 새 시작이 겹치면 진행 중이 둘이 된다 — start 와 같은 잠금
         LocalDateTime now = LocalDateTime.now();
         FastingSession last = repository.findFirstByUserIdOrderByIdDesc(userId)
                 .filter(s -> s.getEndedBy() == FastingEndReason.MEAL)
@@ -170,7 +178,7 @@ public class FastingService {
     }
 
     public FastingStatusResponse active(Long userId) {
-        return repository.findByUserIdAndEndedAtIsNull(userId)
+        return repository.findFirstByUserIdAndEndedAtIsNullOrderByIdDesc(userId)
                 .map(s -> toStatus(s, LocalDateTime.now(), true))
                 .orElseGet(FastingStatusResponse::inactive);
     }
@@ -219,10 +227,15 @@ public class FastingService {
             return new PartnerFastingResponse(false, null, false, null, null);
         }
         String partnerName = userRepository.findById(partnerId).map(u -> u.getName()).orElse(null);
-        return repository.findByUserIdAndEndedAtIsNull(partnerId)
+        return repository.findFirstByUserIdAndEndedAtIsNullOrderByIdDesc(partnerId)
                 .map(s -> new PartnerFastingResponse(true, partnerName, true,
                         (int) Duration.between(s.getStartedAt(), LocalDateTime.now()).toMinutes(), s.getTargetHours()))
                 .orElseGet(() -> new PartnerFastingResponse(true, partnerName, false, null, null));
+    }
+
+    private void lockUser(Long userId) {
+        userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "사용자를 찾을 수 없어요."));
     }
 
     /** 서버 벽시계(존 없는 now) → KST. 운영은 UTC, 테스트 JVM 은 KST 라 시스템 기본 존을 거친다. */
