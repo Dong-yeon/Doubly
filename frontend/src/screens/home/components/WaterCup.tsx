@@ -23,7 +23,7 @@ import { themedStyles } from '../../../theme/themedStyles';
 import { layout } from '../../../theme/layout';
 import { formatNumber } from '../../../utils/format';
 import { useReduceMotion } from '../../../hooks/useOneShotMotion';
-import { WATER_CUP_ML, WATER_STEP_ML } from '../useHomeWater';
+import { WATER_CUP_ML, WATER_STEP_ML } from '../../../store/waterStore';
 
 /** 컵 상자 — 원 36 안 */
 const CUP_W = 20;
