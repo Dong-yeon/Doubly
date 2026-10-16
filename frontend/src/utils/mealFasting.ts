@@ -10,8 +10,8 @@
  *
  * 다이얼로그·토스트 모두 루트에 그려지므로(ConfirmDialog·Toast) 기록 화면이 닫힌 뒤에도 뜬다.
  */
-import { create } from 'zustand';
 import { fastingApi } from '../api/fasting';
+import { useFastingStore } from '../store/fastingStore';
 import { toast } from '../store/toastStore';
 import { Alert } from './alert';
 import { getErrorMessage } from './error';
@@ -19,15 +19,10 @@ import { haptics } from './haptics';
 import type { FastingPlan, MealFastingOutcome } from '../types';
 
 /**
- * 단식 상태가 화면 밖에서 바뀌었다는 신호 — 식단 화면이 구독해 단식 줄을 다시 받는다.
+ * 단식 상태가 화면 밖에서 바뀌었다 — 공용 스토어가 다시 읽고, 홈 카운트다운·럽바디 단식 줄이 함께 따라온다.
  * (되돌리기·시작은 기록 화면이 닫힌 뒤 일어나 식단 화면의 포커스 갱신을 놓친다)
  */
-export const useFastingSignal = create<{ version: number; bump: () => void }>((set) => ({
-  version: 0,
-  bump: () => set((s) => ({ version: s.version + 1 })),
-}));
-
-const bump = () => useFastingSignal.getState().bump();
+const bump = () => useFastingStore.getState().changed();
 
 export const FASTING_PLAN_LABEL: Record<FastingPlan, string> = {
   SIXTEEN_EIGHT: '16:8',

@@ -20,7 +20,8 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../../utils/alert';
-import { formatFastingDuration, useFastingSignal } from '../../utils/mealFasting';
+import { formatFastingDuration } from '../../utils/mealFasting';
+import { useFastingStore } from '../../store/fastingStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -453,23 +454,17 @@ export function DietScreen({ navigation, route }: Props) {
   useWaterSync({ load: false });
 
   // 간헐적 단식 타이머
-  const [fasting, setFasting] = useState<FastingStatus | null>(null);
-  const [partnerFasting, setPartnerFasting] = useState<PartnerFasting | null>(null);
+  // 값은 홈 카운트다운과 같은 공용 스토어(store/fastingStore) — 두 화면이 같은 단식을 본다
+  const fasting = useFastingStore((s) => s.mine);
+  const partnerFasting = useFastingStore((s) => s.partner);
+  const fastingState: LoadState = useFastingStore((s) => s.state);
   const [fastingModal, setFastingModal] = useState(false);
   const [fastingBusy, setFastingBusy] = useState(false);
   const [customHours, setCustomHours] = useState('16');
   const [insights, setInsights] = useState<HabitInsights | null>(null);
-  const [fastingState, setFastingState] = useState<LoadState>('loading');
   const refreshFasting = useCallback(() => {
-    fastingApi
-      .active()
-      .then((f) => {
-        setFasting(f);
-        setFastingState('ok');
-      })
-      .catch(() => setFastingState((st) => (st === 'ok' ? 'ok' : 'error')));
-    // 상대 진행 상태는 곁들이는 정보라 실패해도 줄을 비우기만 한다
-    fastingApi.partner().then(setPartnerFasting).catch(() => setPartnerFasting(null));
+    // 상대 진행 상태도 함께 — 곁들이는 정보라 실패하면 비우기만 한다(스토어)
+    void useFastingStore.getState().load({ partner: true });
     // 지난 단식 결과 줄(이번 주 n번째·연속)도 리포트 응답에서 — 실패하면 그 줄만 숨긴다
     habitsApi.insights().then(setInsights).catch(() => setInsights(null));
   }, []);
@@ -499,11 +494,14 @@ export function DietScreen({ navigation, route }: Props) {
       setWaterGoalBusy(false);
     }
   };
-  // 식사 기록 뒤 되돌리기·시작 제안처럼 이 화면 밖에서 단식이 바뀌면 다시 받는다(utils/mealFasting)
-  const fastingSignal = useFastingSignal((s) => s.version);
+  /*
+   * 식사 기록 뒤 되돌리기·시작 제안처럼 이 화면 밖에서 단식이 바뀌면(utils/mealFasting) 단식 값은 스토어가 이미 다시 읽었다 —
+   * 여기서는 지난 단식 결과 줄(리포트 응답)만 다시 받는다
+   */
+  const fastingVersion = useFastingStore((s) => s.version);
   useEffect(() => {
-    if (fastingSignal > 0) refreshFasting();
-  }, [fastingSignal, refreshFasting]);
+    if (fastingVersion > 0) habitsApi.insights().then(setInsights).catch(() => setInsights(null));
+  }, [fastingVersion]);
   // 끼니 연동 설정 — 시작 모달을 열 때 받는다. 못 받으면 스위치를 숨긴다(켜짐이라고 거짓말하지 않는다)
   const [fastingSettings, setFastingSettings] = useState<FastingSettings | null>(null);
   useEffect(() => {
@@ -675,7 +673,7 @@ export function DietScreen({ navigation, route }: Props) {
     try {
       const hours = planType === 'CUSTOM' ? Number(customHours) : undefined;
       const res = await fastingApi.start(planType, hours);
-      setFasting(res);
+      useFastingStore.getState().apply(res);
       haptics.success();
       toast.success(`${res.planLabel} 단식을 시작했어요`);
       setFastingModal(false);
@@ -694,7 +692,9 @@ export function DietScreen({ navigation, route }: Props) {
         onPress: async () => {
           try {
             const res = await fastingApi.end();
-            setFasting({ ...res, active: false });
+            useFastingStore.getState().apply({ ...res, active: false });
+            // 끝낸 단식이 "지난 단식 결과" 줄에 나오도록 리포트도 다시 받는다
+            habitsApi.insights().then(setInsights).catch(() => setInsights(null));
             haptics.success();
             toast.success(res.achieved ? '목표 시간을 채웠어요!' : '단식을 종료했어요.');
           } catch (e) {

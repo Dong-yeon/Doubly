@@ -28,13 +28,14 @@ import { Avatar } from '../../../components/Avatar';
 import { HeartSproutIcon } from '../../../components/HeartSproutIcon';
 import { AvatarCrown } from './AvatarCrown';
 import { WaterCup } from './WaterCup';
+import { FastingCountdown } from './FastingCountdown';
 import { TodayRing, todayRingLabel, type TodaySlices } from './TodayRing';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
 import { themedStyles } from '../../../theme/themedStyles';
 import { onColor } from '../../../theme/onColor';
 import { layout } from '../../../theme/layout';
-import type { LovelichelinSignal } from '../../../types';
+import type { FastingStatus, LovelichelinSignal } from '../../../types';
 
 /** 한 사람의 오늘 — 한 열에 들어가는 값 묶음 */
 export interface PersonToday {
@@ -90,6 +91,13 @@ export interface CoupleHeroProps {
   onTapWater?: (delta: number) => boolean;
   /** 상대 물컵을 눌렀을 때 — 보기 전용이라 양만 알려 준다 */
   onPressPartnerWater?: () => void;
+  /**
+   * 내 진행 중 단식 — 있으면 내 열 최근 기록 줄 아래에 카운트다운(FastingCountdown). <b>내 열에만</b> 받는다:
+   * 상대 단식은 홈에 보이지 않는다(2026-10-16 사용자 결정, docs/HOME_FASTING_TIMER_ANALYSIS_2026-10-16.md)
+   */
+  myFasting?: FastingStatus | null;
+  /** 카운트다운을 눌렀을 때 — 럽바디 단식 줄로 */
+  onPressFasting?: () => void;
 }
 
 export function CoupleHero({
@@ -103,6 +111,8 @@ export function CoupleHero({
   onPressCrown,
   onTapWater,
   onPressPartnerWater,
+  myFasting,
+  onPressFasting,
 }: CoupleHeroProps) {
   return (
     <View style={styles.wrap}>
@@ -143,6 +153,8 @@ export function CoupleHero({
           onPressToday={(kind) => onPressToday?.('me', kind)}
           onPressCrown={() => onPressCrown?.('me')}
           onTapWater={onTapWater}
+          fasting={myFasting}
+          onPressFasting={onPressFasting}
           mine
           mealHint="한 끼 기록하기"
         />
@@ -178,6 +190,8 @@ function PersonColumn({
   onPressCrown,
   onTapWater,
   onPressPartnerWater,
+  fasting,
+  onPressFasting,
   mine = false,
   mealHint,
 }: {
@@ -191,6 +205,9 @@ function PersonColumn({
   onPressCrown: () => void;
   onTapWater?: (delta: number) => boolean;
   onPressPartnerWater?: () => void;
+  /** 내 진행 중 단식 — 내 열만 받는다(CoupleHeroProps.myFasting) */
+  fasting?: FastingStatus | null;
+  onPressFasting?: () => void;
   /** 내 열인가 — 왕관이 처음 내려앉을 때 햅틱은 내 신호에만 */
   mine?: boolean;
   /** 식단 버튼이 하는 일이 다를 때(내 쪽은 기록 시트가 열린다) 접근성 힌트 */
@@ -287,6 +304,9 @@ function PersonColumn({
           {meta}
         </Text>
       ) : null}
+
+      {/* 단식 중일 때만 — 최근 기록 줄 아래 카운트다운 한 줄(내 열만). 안 하는 날엔 열이 지금과 똑같다 */}
+      {fasting?.active && onPressFasting ? <FastingCountdown status={fasting} onPress={onPressFasting} /> : null}
 
       {/*
         럽슐랭 왕관 — 링 왼쪽 위(10시 반)에 비스듬히 씌운다. 열의 마지막 자식이라 위에 그려지고, 절대 위치라 열 높이에
