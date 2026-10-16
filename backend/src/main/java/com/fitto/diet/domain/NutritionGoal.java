@@ -47,6 +47,14 @@ public class NutritionGoal {
     @Column(name = "goal_direction", length = 10)
     private DietGoalType goalDirection;
 
+    /** 식사를 기록하면 진행 중인 단식을 자동으로 끝낼지(V145) — null 은 켜짐 */
+    @Column(name = "fasting_auto_end")
+    private Boolean fastingAutoEnd;
+
+    /** 저녁을 기록하면 "단식 시작할까요?"를 물을지(V145) — null 은 켜짐 */
+    @Column(name = "fasting_offer_dinner")
+    private Boolean fastingOfferDinner;
+
     public NutritionGoal(Long userId) {
         this.userId = userId;
     }
@@ -64,5 +72,19 @@ public class NutritionGoal {
 
     public void updateWaterGoal(Integer targetWaterMl) {
         this.targetWaterMl = targetWaterMl;
+    }
+
+    public boolean fastingAutoEndOrDefault() {
+        return fastingAutoEnd == null || fastingAutoEnd;
+    }
+
+    public boolean fastingOfferDinnerOrDefault() {
+        return fastingOfferDinner == null || fastingOfferDinner;
+    }
+
+    /** null 인 값은 그대로 둔다(한쪽만 바꾸는 요청) */
+    public void updateFastingSettings(Boolean autoEnd, Boolean offerDinner) {
+        if (autoEnd != null) this.fastingAutoEnd = autoEnd;
+        if (offerDinner != null) this.fastingOfferDinner = offerDinner;
     }
 }
