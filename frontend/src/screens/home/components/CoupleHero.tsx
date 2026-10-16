@@ -27,6 +27,7 @@ import { MaterialCommunityIcons } from '../../../components/Icon';
 import { Avatar } from '../../../components/Avatar';
 import { HeartSproutIcon } from '../../../components/HeartSproutIcon';
 import { AvatarCrown } from './AvatarCrown';
+import { WaterCup } from './WaterCup';
 import { TodayRing, todayRingLabel, type TodaySlices } from './TodayRing';
 import { formatDateLabel } from '../../../utils/date';
 import { colors, fontSize, radius, spacing } from '../../../constants/theme';
@@ -67,6 +68,8 @@ export interface PersonToday {
   today?: TodaySlices | null;
   /** 오늘 간식을 남겼는가 — 조각은 없고(4조각 고정) 스크린리더 문장에만 들어간다 */
   snack?: boolean;
+  /** 오늘 마신 물(ml) — 있으면 [운동][식단] 옆에 물컵(WaterCup). 모르면(못 읽음·커플 아님) 컵을 안 그린다 */
+  waterMl?: number | null;
 }
 
 export interface CoupleHeroProps {
@@ -83,6 +86,10 @@ export interface CoupleHeroProps {
   onPressToday?: (who: 'me' | 'partner', kind: 'workout' | 'meal') => void;
   /** 아바타 위 럽슐랭 왕관의 말풍선을 눌렀을 때 — 그 장소·콘텐츠 상세로 */
   onPressCrown?: (who: 'me' | 'partner') => void;
+  /** 내 물컵 탭(+250)·길게 누르기(−250). 0 아래로 못 가면 false */
+  onTapWater?: (delta: number) => boolean;
+  /** 상대 물컵을 눌렀을 때 — 보기 전용이라 양만 알려 준다 */
+  onPressPartnerWater?: () => void;
 }
 
 export function CoupleHero({
@@ -94,6 +101,8 @@ export function CoupleHero({
   onPressPerson,
   onPressToday,
   onPressCrown,
+  onTapWater,
+  onPressPartnerWater,
 }: CoupleHeroProps) {
   return (
     <View style={styles.wrap}>
@@ -133,6 +142,7 @@ export function CoupleHero({
           onPress={() => onPressPerson?.('me')}
           onPressToday={(kind) => onPressToday?.('me', kind)}
           onPressCrown={() => onPressCrown?.('me')}
+          onTapWater={onTapWater}
           mine
           mealHint="한 끼 기록하기"
         />
@@ -146,6 +156,7 @@ export function CoupleHero({
           onPress={() => onPressPerson?.('partner')}
           onPressToday={(kind) => onPressToday?.('partner', kind)}
           onPressCrown={() => onPressCrown?.('partner')}
+          onPressPartnerWater={onPressPartnerWater}
         />
       </View>
     </View>
@@ -165,6 +176,8 @@ function PersonColumn({
   onPress,
   onPressToday,
   onPressCrown,
+  onTapWater,
+  onPressPartnerWater,
   mine = false,
   mealHint,
 }: {
@@ -176,6 +189,8 @@ function PersonColumn({
   onPress: () => void;
   onPressToday: (kind: 'workout' | 'meal') => void;
   onPressCrown: () => void;
+  onTapWater?: (delta: number) => boolean;
+  onPressPartnerWater?: () => void;
   /** 내 열인가 — 왕관이 처음 내려앉을 때 햅틱은 내 신호에만 */
   mine?: boolean;
   /** 식단 버튼이 하는 일이 다를 때(내 쪽은 기록 시트가 열린다) 접근성 힌트 */
@@ -251,6 +266,20 @@ function PersonColumn({
           hint={mealHint ?? `${person.name} 식단 기록`}
           onPress={() => onPressToday('meal')}
         />
+        {/*
+          물컵 — 이 줄의 세 번째이자 <b>마지막</b> 칸이다. 이 줄은 "오늘 챙김" 묶음이고 홈은 스크롤이 없어, 넷째를 넣으면
+          320 폭에서 원이 겹친다. 체중·수면 같은 다음 후보는 각자의 탭으로(docs/HOME_WATER_TAP_ANALYSIS_2026-10-16.md §9).
+        */}
+        {person.waterMl != null ? (
+          <WaterCup
+            ml={person.waterMl}
+            fill={fill}
+            name={person.name}
+            mine={mine}
+            onTap={onTapWater}
+            onPressPartner={onPressPartnerWater}
+          />
+        ) : null}
       </View>
 
       {/* 기록이 없으면 줄을 비운다 — "아직 기록이 없어요"를 상주시키지 않는다 */}
@@ -377,7 +406,15 @@ const styles = themedStyles((colors) => ({
   },
   moodNoteText: { color: colors.textSecondary, fontSize: fontSize.caption, fontWeight: '600' },
 
-  today: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
+  // 좁은 폭(320)에서 세 칸(물컵 포함)이 열보다 넓으면 원 크기(36)까지 줄어든다
+  today: {
+    width: layout.touchTarget,
+    height: layout.touchTarget,
+    minWidth: 36,
+    flexShrink: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   todayCircle: {
     width: 36,
     height: 36,
