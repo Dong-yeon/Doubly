@@ -310,3 +310,12 @@
 
 ### 남은 것
 - 실기기(햅틱·애니메이션 느낌), OTA·서버 배포는 아직. 서버와 앱은 서로 독립이라 배포 순서는 상관없다.
+
+## 14. 배포 (2026-10-16)
+- **서버**: main `896a0d7b`(add 원자화) Railway **SUCCESS** 확인(`railway deployment list`). 그 전 앱·문서만 바뀐 푸시는 SKIPPED(watch path `/backend/**`).
+- **OTA (production)**: 소스 `7d422ffa`, 태그 `ota/2026-10-16-water` — **main 이 아니다.** 재화 P1(OTA 보류, `d70087bc`)을 빼려고 지난 OTA 소스
+  `ota/2026-10-16-habits`(f0c7736f) 위에 앱 커밋 두 개(6692e9d1·7c1c316d)를 체리픽했다. main 과의 frontend 차이는 재화 P1 파일 10개뿐임을 확인.
+  - fingerprint(분리 워크트리 + `npm ci`): android `700b96c0…` · ios `d75619b0…` — 1.0.7 production 빌드(Android 39·iOS 33/34)와 일치.
+  - update group: iOS `e5fd1ca0-76f9-412a-b986-a5b3ae19577e`, Android `1d5dad2f-6ee7-41dc-b017-6e289aa20866`.
+  - 다음 main OTA 를 그대로 올리면 재화 P1 이 같이 나간다 — 보류가 풀리기 전엔 이 태그 위에 체리픽하는 방식을 이어 간다.
+- 남은 것: 실기기(물컵 햅틱·출렁임, 럽바디 연타 표시).
