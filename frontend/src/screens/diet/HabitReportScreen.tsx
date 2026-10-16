@@ -25,11 +25,16 @@ const fmtDay = (iso: string) => {
   return `${Number(m)}/${Number(d)}`;
 };
 
-/** 지난주 대비 — 같으면 말하지 않는다 */
-function diffText(now: number, before: number, unit: string): string | null {
-  const d = now - before;
-  if (d === 0) return null;
-  return `지난주보다 ${Math.abs(d)}${unit} ${d > 0 ? '많아요' : '적어요'}`;
+/** 지난주 값 — 카드가 좁아 "지난주보다 n일 적어요"는 세 줄로 접혔다. 숫자만 나란히 둔다 */
+function lastWeekText(before: number, unit: string): string {
+  return `지난주 ${before}${unit}`;
+}
+
+/** 평균 공복 — 큰 글씨는 시간, 분은 작은 글씨로("15시간 …"으로 잘리던 것) */
+function splitDuration(min: number): { value: string; unit: string } {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return { value: `${h}`, unit: m > 0 ? `시간 ${m}분` : '시간' };
 }
 
 export function HabitReportScreen() {
@@ -82,18 +87,18 @@ export function HabitReportScreen() {
             label="단식 목표 달성"
             value={`${w.achievedCount}`}
             unit={`/${w.fastCount}번`}
-            sub={diffText(w.achievedCount, lw.achievedCount, '번')}
+            sub={lastWeekText(lw.achievedCount, '번')}
           />
           <Summary
             label="평균 공복"
-            value={w.avgFastMin != null ? formatFastingDuration(w.avgFastMin) : '-'}
+            {...(w.avgFastMin != null ? splitDuration(w.avgFastMin) : { value: '-' })}
             sub={data.achievedStreak > 0 ? `${data.achievedStreak}일 연속 달성` : null}
           />
           <Summary
             label="물 목표 채운 날"
             value={`${w.waterGoalDays}`}
             unit="/7일"
-            sub={diffText(w.waterGoalDays, lw.waterGoalDays, '일')}
+            sub={lastWeekText(lw.waterGoalDays, '일')}
           />
         </View>
 
@@ -235,7 +240,7 @@ export function HabitReportScreen() {
 function Summary({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub?: string | null }) {
   return (
     <Card elevation="sm" style={styles.summaryCard}>
-      <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit>
+      <Text style={styles.summaryValue} numberOfLines={1}>
         {value}
         {unit ? <Text style={styles.summaryUnit}>{unit}</Text> : null}
       </Text>
@@ -349,7 +354,7 @@ const styles = themedStyles((colors) => ({
   summaryValue: { fontSize: fontSize.title, fontWeight: '800', color: colors.textPrimary },
   summaryUnit: { fontSize: fontSize.caption, fontWeight: '700', color: colors.textSecondary },
   summaryLabel: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs, fontWeight: '600', textAlign: 'center' },
-  summarySub: { fontSize: 11, color: colors.meText, marginTop: 2, fontWeight: '700', textAlign: 'center' },
+  summarySub: { fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: '600', textAlign: 'center' },
   section: { gap: spacing.sm },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
   sectionTitle: { fontSize: fontSize.subtitle, fontWeight: '800', color: colors.textPrimary },
