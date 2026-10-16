@@ -75,6 +75,7 @@ import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
 import { announceMealFasting } from '../../utils/mealFasting';
+import { useFastingStore } from '../../store/fastingStore';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { Alert } from '../../utils/alert';
@@ -277,6 +278,8 @@ export function HomeScreen({ navigation }: Props) {
    * 읽기도 그때만. 럽바디 물 줄과 같은 값이며, 홈을 떠날 때 안 보낸 탭을 바로 보내 럽바디가 낡은 값을 읽지 않게 한다.
    */
   const water = useHomeWater(!!couple?.partner);
+  // 단식 카운트다운 — 내 것만(상대 단식은 홈에 안 보인다, docs/HOME_FASTING_TIMER_ANALYSIS_2026-10-16.md)
+  const myFasting = useFastingStore((s) => s.mine);
   const bgUrl = couple?.backgroundImageUrl ?? null;
   /*
    * 배경 사진이 실제로 보이는 높이 — 화면 맨 위부터 하단 패널 윗선까지.
@@ -332,6 +335,8 @@ export function HomeScreen({ navigation }: Props) {
     // fetchAll 은 실패해도 store 의 기존 couple/relations 를 그대로 둔다(재시도 여지를 위해
     // 지우지 않음) — 여기서 잡아주지 않으면 catch 가 없어 unhandled rejection 이 된다(P1-10).
     fetchAll().catch(noteOffline);
+    // 내 단식(카운트다운) — 공용 스토어. 실패하면 마지막 값을 둔다(startedAt 으로 그리므로 시간은 맞게 흐른다)
+    void useFastingStore.getState().load();
     workoutApi.today().then((l) => setMyWorkoutDone(l.length > 0)).catch(() => setMyWorkoutDone(false));
     workoutApi.partnerToday().then(setPartner).catch(() => setPartner(null));
     dietApi.today().then(setMyMeals).catch(() => setMyMeals([]));
@@ -1090,6 +1095,8 @@ export function HomeScreen({ navigation }: Props) {
                   onPressPerson={(who) => setProfileWho(who)}
                   // 물컵 — 내 컵은 +250/−250, 상대 컵은 보기 전용(내 물을 상대 이름으로 남길 수 없다)
                   onTapWater={water.tap}
+                  myFasting={myFasting}
+                  onPressFasting={() => navigation.navigate('Health', { screen: 'DietMain', pop: true })}
                   onPressPartnerWater={() =>
                     toast.info(
                       `${partner?.partnerName ?? couple?.partner?.name ?? '상대'}님은 오늘 물 ${formatNumber(water.partner ?? 0)}ml 마셨어요`,

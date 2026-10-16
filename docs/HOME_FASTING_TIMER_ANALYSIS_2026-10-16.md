@@ -214,3 +214,25 @@ interface FastingState {
 - **Q3. 상대 열**: 상대 열에도 카운트다운을 보이는가(권장 — "곧 같이 밥 먹자"가 커플 앱다운 장면), "단식 중"만 보이는가?
 - **Q4. 서버**: 동시 시작 경합 수정(S0)을 같이 하는가(권장)? 호출 하나로 묶는 `/fasting/couple`(S4)까지 하는가(선택)?
 - **Q5. 안드로이드 위젯**: 이번엔 하지 않는다(권장) vs "끝나는 시각" 정적 표기를 2차로 한다?
+
+## 11. 결정·구현 (2026-10-16, 같은 날)
+
+**사용자 결정**: 권장안대로 진행하되 **상대방의 단식은 홈에 보이지 않는다**(Q3 → 숨김). Q1-b 분 단위, Q2 홈은 표시만, Q4 S0 함께, Q5 위젯 안 함 — 권장안 그대로.
+럽바디 단식 줄의 "상대 n시간 경과"는 그대로 둔다(이번 결정은 홈 범위).
+
+**서버 (S0, 마이그레이션 없음)**
+- `FastingService.start`·`end`·`reopen` 첫머리에서 `UserRepository.findByIdForUpdate`(PESSIMISTIC_WRITE)로 사용자 행을 잠근다.
+- 진행 중 조회를 `findFirstByUserIdAndEndedAtIsNullOrderByIdDesc` 로 — 잠금 전에 생긴 중복이 있어도 500 없이 최신 것을 읽고, `end` 를 두 번 하면 둘 다 정리된다.
+- 테스트 `FastingMealLinkFlowTest` +2: 6스레드 동시 시작 → 성공 1·거절 5·진행 중 1개 / 중복 진행 행 → 조회·종료 정상. Fasting* 33건 전부 통과(H2).
+  (잠금을 뺀 상태에서 이 테스트가 실제로 빨개지는지는 확인하지 않았다.)
+- 운영 DB 에 이미 중복이 있는지 확인 SQL(배포 뒤 1회):
+  `SELECT user_id, COUNT(*) FROM fasting_sessions WHERE ended_at IS NULL GROUP BY user_id HAVING COUNT(*) > 1;`
+
+**앱 (S1·S2, OTA 가능 — 새 의존성·글리프·package.json/app.json 변경 없음)**
+- `store/fastingStore.ts` 신설(mine·partner·state·version, 세대 번호로 로그아웃 뒤 옛 응답 버림, 늦게 출발한 읽기만 반영). `authStore` 로그아웃에서 reset.
+- `utils/mealFasting.ts` 의 `useFastingSignal` 제거 → `useFastingStore.changed()`(다시 읽기 + version). DietScreen 은 스토어 셀렉터로, version 이 오르면 지난 단식 결과(리포트)만 다시 받는다. 버튼 종료 뒤에도 결과 줄이 바로 나오도록 리포트를 다시 받는다(예전엔 다음 진입 때).
+- `screens/home/components/FastingCountdown.tsx` — 내 열 최근 기록 줄 아래, `⏱ 2:40 남음`(1시간 미만 `38분 남음`) → 0 이면 `🎉 16시간 달성` → 목표 2배 넘으면 `⏱ 32시간째 단식 중`.
+  정각 분에 맞춘 setTimeout, 홈 포커스를 잃으면 멈춤, 앱이 앞으로 오면 바로 다시 세고 서버도 다시 읽음. 글자색 `meText`, 고정폭 숫자. 누르면 럽바디(DietMain, pop).
+- `CoupleHero` 는 `myFasting` 을 **내 열에만** 넘긴다(상대 열에는 통로 자체가 없다). `HomeScreen.refresh()`(포커스·커플 이벤트)에서 스토어 load.
+- 확인: `npm run typecheck` 통과, 바뀐 파일 lint 오류 0(경고 2건은 HomeScreen 기존 haptics 중복 import). 카운트다운 계산 경계(방금·30초 남음→1분·정확히 0→달성·31h59→달성·32h→방치·기기 시계 늦음→목표로 자름·KST 자정 넘김)를 노드로 확인.
+- **확인 못 한 것**: 웹·실기기 화면(로컬 Docker·서버가 꺼져 있어 띄우지 않았다) — 320 폭에서 열 높이, 정각 분 감소, 다른 기기 종료 반영, 홈 사진 저장으로 자동 종료 시 줄 사라짐. OTA 전/후 실기기에서 볼 것.
