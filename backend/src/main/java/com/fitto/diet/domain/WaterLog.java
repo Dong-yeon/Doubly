@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 
 /**
  * 물 섭취 기록 — 날짜별 누적치 1행(user_id, log_date 유니크). 화면의 "+250ml" 버튼이
- * {@link #add(int)} 로 이 행을 증분한다. 별도 목표(target)는 {@code NutritionGoal.targetWaterMl}.
+ * WaterLogRepository.addAmount 로 이 행을 원자적으로 증분한다. 별도 목표(target)는 {@code NutritionGoal.targetWaterMl}.
  */
 @Entity
 @Table(name = "water_logs")
@@ -50,10 +50,5 @@ public class WaterLog {
         this.userId = userId;
         this.logDate = logDate;
         this.amountMl = amountMl;
-    }
-
-    /** amountMl 을 delta 만큼 증감한다. 0 아래로는 내려가지 않는다(마이너스 버튼으로 오남용 방지). */
-    public void add(int deltaMl) {
-        this.amountMl = Math.max(0, this.amountMl + deltaMl);
     }
 }
