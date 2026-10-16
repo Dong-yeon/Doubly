@@ -117,6 +117,40 @@
 2. 저녁 제안 대상 — **단식을 해 본 적 있는 사람만**(최근 30일 안 1회 이상).
 3. 4주 비교·체중 겹쳐 보기 — **무료**(권장안 PRO 를 뒤집음). `FULL_STATS` 를 거치지 않는다 — Feature 주석의 "물·단식 습관 리포트" 예약 문구도 함께 고친다.
 
+## 7. P0 구현 기록 (2026-10-16)
+
+**서버 (V145)**
+- `fasting_sessions.ended_by`(MANUAL/MEAL)·`target_notified_at`, `nutrition_goals.fasting_auto_end`·`fasting_offer_dinner`(null = 켜짐), 인덱스 `(user_id, started_at)`.
+- `FastingService.onMealSaved(userId, mealDate, mealType[, now])` — `MealService.save` 끝에서 부른다(새 저장만, 멱등 재전송·수정·복사는 안 부름).
+  결과는 저장 응답 `MealResponse.fasting`(`ENDED`/`ASK_END`/`OFFER_START`, 없으면 null).
+  - 지난 날짜 식사 → 아무것도 안 함 · 자동 종료 끔 → 아무것도 안 함.
+  - 단식 중 + 시작 4시간 미만 **또는** "오늘 낮 12시 이후 시작한 단식에 오늘 날짜 식사" → `ASK_END`(끝내지 않음). 그 밖 → `ENDED`(endedBy=MEAL).
+  - 단식 없음 + 저녁 + 제안 켬 + 최근 30일 안에 시작한 단식 있음 → `OFFER_START`(지난번 플랜·시간).
+  - 데이트 식단이어도 **기록한 사람의 단식만** 본다.
+  - 같은 트랜잭션이지만 `noRollbackFor` + 호출자 try/catch — 단식 오류가 식단 저장을 되돌리지 않는다.
+- `POST /fasting/reopen` — 마지막 단식이 MEAL 로 끝났고 10분 안일 때만. 그 뒤 새 단식을 시작했으면 불가.
+- `StartFastingRequest.minutesAgo`(0~360) — 직전 단식 종료 시각보다 앞으로는 자른다(공복 이중 계산 방지).
+- `GET /fasting/history?days=`(1~120), `GET·PUT /fasting/settings`.
+- `FastingTargetNotifier` — 매분 30초, 목표 도달 단식에 본인 REMINDER 푸시 1회. 도달 후 60분 넘은 건 보내지 않고 표시만(배포 직후 묵은 알림 폭주 방지).
+- 시각 판정은 `FastingService.toKst`(시스템 기본 존 → KST) 한 곳. 운영 JVM 은 UTC, 테스트 JVM 은 KST 라 둘 다 맞는다.
+
+**앱**
+- `utils/mealFasting.ts` 의 `announceMealFasting` — 기록 화면·홈 사진 바로 저장(보관함 재시도 포함)·럽슐랭 방문+식단 세 곳에서 부른다.
+  ENDED 는 저장 토스트에 합쳐 [되돌리기], ASK_END·OFFER_START 는 루트 다이얼로그(기록 화면이 닫혀도 뜬다).
+  홈 사진 저장이 단식을 끝냈으면 "같이 먹었어요" 버튼은 빠진다(토스트 버튼 자리 하나). 럽슐랭 등급 팡파르 때는 안내 생략(단식은 서버에서 이미 처리).
+- 식단 화면 단식 줄: 달성 여부를 경과 시간으로 다시 계산(켜 둔 채 목표를 넘겨도 바뀐다), 단계 문구 한 줄(§2-1 표현), 화면 밖 변화는 `useFastingSignal` 로 다시 받는다.
+- 시작 모달: 연동 설정 스위치 2개 + 하면 안 되는 사람 안내(막지 않음).
+
+**검증**
+- 백엔드 전체 1,510건 통과(H2). 새 `FastingMealLinkFlowTest` 24건 — 기준 시각을 넣어 시각 의존 없이(자정 직후, 오늘 오후 시작+낮 끼니, 31일 전 단식, 멱등 재전송 뒤 새 단식, 되돌리기 만료·버튼 종료·새 단식 뒤, 6시간 초과·음수, 기간 0/121/-5, 목표 도달 중복·묵은 알림).
+- 로컬 PostgreSQL 에 V145 적용 확인(bootRun). API 이상 입력: minutesAgo 361/-5/"abc"·days 0/abc/거대값·잘못된 본문 → 전부 400, 진행 중 재시작·되돌릴 것 없음 → 400.
+- 웹(375×812, 로컬 서버를 운영처럼 **UTC JVM** 으로): 6시간 단식 중 아침 저장 → "단식은 6시간 3분으로 끝냈어요 · 식단 기록 완료!" + [되돌리기] → "단식을 이어갈게요" + 단식 줄이 원래 시작 시각으로 복귀 / 저녁 저장 → 시작 제안("내일 오전 1:13에 끝나요") → 30분 전부터(직전 종료 1분 전이라 0분으로 잘림 — 의도대로) / 간식 → 묻기 → 계속·끝내기 둘 다 / 제안 끔 → 저녁 저장해도 안 물음.
+- **검증에서 잡은 것**: ① 설정 스위치 연타 시 서버는 꺼짐인데 화면은 켜짐(응답 순서 경합) → 요청을 한 줄로 세우고 마지막 응답만 반영, 3·4·5연타 모두 일치 확인 ② "6시간 1분로" 조사 → "으로" ③ "0분 지났어요" → "방금 시작한 단식이에요".
+- 로컬 JVM 이 KST 면 응답 시각(Z 표기)이 9시간 어긋나 화면 경과가 0으로 보인다 — 운영(UTC)과 무관한 로컬 함정. 로컬 검증은 `JAVA_TOOL_OPTIONS=-Duser.timezone=UTC` 로 띄운다.
+- 확인 못 한 것: 홈 사진 바로 저장 경로(사진 업로드 필요)·럽슐랭 방문 경로의 화면, 실기기(네이티브 다이얼로그), 실제 푸시 수신.
+
+**남은 것**: P1(끝 결과 카드·물 목표 UI·물 이력·주간 요약), P2(4주 비교·체중 겹쳐 보기 — 무료, 커플 "둘 다 채운 날").
+
 ## 출처
 - [Anton et al. 2018, Flipping the Metabolic Switch (Obesity)](https://onlinelibrary.wiley.com/doi/10.1002/oby.22065)
 - [Increasing autophagy with fasting and diet: separating fact from fiction](https://portlandpress.com/biochemsoctrans/article/54/10/1497/238169/Increasing-autophagy-with-fasting-and-diet)
