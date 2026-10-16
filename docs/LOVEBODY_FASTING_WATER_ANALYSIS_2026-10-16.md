@@ -181,6 +181,13 @@
 - **검증에서 잡은 것**: 평균 공복 "15시간 …" 잘림 → 시간 크게·분 작게, 결과 줄·리포트 요약 줄 어색한 줄바꿈 → 문구 줄이고 요약을 아래 줄로, "지난주보다 n일 적어요" 세 줄 접힘 → "지난주 n일".
 - 확인 못 한 것: 실기기(네이티브 모달·막대 렌더), 다크/라이트 양쪽 색 대비 수치(verify:theme 는 팔레트를 안 바꿨으니 해당 없음).
 
+**배포 (2026-10-16)**
+- 서버: main `197542dd` → Railway SUCCESS(마이그레이션 없음).
+- OTA: production — 소스 **`f0c7736f`(태그 `ota/2026-10-16-habits`)** = `ota/2026-10-16-fasting` 위에 `b1e6ef37`·`a8af45c3` 만(재화 P1 보류분 계속 제외).
+  fingerprint Android `700b96c0`·iOS `d75619b0` = 1.0.7 와 일치. update group: iOS `25eff01e`, Android `1bf45f91`.
+
+**남은 것**: 실기기 확인. 물 목표 이력(목표를 바꾸면 지난 날 "채운 날"도 새 목표로 다시 잰다). 홈 화면 물 탭은 별도 분석(`docs/` 의 홈 물 한 컵 탭 분석, 다른 세션).
+
 ## 출처
 - [Anton et al. 2018, Flipping the Metabolic Switch (Obesity)](https://onlinelibrary.wiley.com/doi/10.1002/oby.22065)
 - [Increasing autophagy with fasting and diet: separating fact from fiction](https://portlandpress.com/biochemsoctrans/article/54/10/1497/238169/Increasing-autophagy-with-fasting-and-diet)
