@@ -36,6 +36,8 @@ import { MoodPicker } from '../../components/MoodPicker';
 import { QuickMealSheet } from './components/QuickMealSheet';
 import { ProfileSheet } from '../../components/ProfileSheet';
 import { PendingMealPhotoPeek } from './components/PendingMealPhotoPeek';
+import { useHomeWater } from './useHomeWater';
+import { formatNumber } from '../../utils/format';
 import {
   CAN_KEEP_PENDING_MEAL_PHOTOS,
   discardPendingMealPhoto,
@@ -270,6 +272,11 @@ export function HomeScreen({ navigation }: Props) {
   // 아니라 "아직 모름"이다 — 로딩 중엔 연결된 것으로 간주해 연결 안내 화면이
   // 잠깐 스쳤다 사라지는 깜빡임(P2-13)을 막는다. 로딩이 끝나면 실제 값을 따른다.
   const connected = relationLoading ? true : !!couple?.partner;
+  /*
+   * 히어로의 물컵 — 탭은 모아서 한 번에, 한 번에 하나씩 보낸다(useHomeWater 주석). 히어로는 연결됐을 때만 그려지므로
+   * 읽기도 그때만. 럽바디 물 줄과 같은 값이며, 홈을 떠날 때 안 보낸 탭을 바로 보내 럽바디가 낡은 값을 읽지 않게 한다.
+   */
+  const water = useHomeWater(!!couple?.partner);
   const bgUrl = couple?.backgroundImageUrl ?? null;
   /*
    * 배경 사진이 실제로 보이는 높이 — 화면 맨 위부터 하단 패널 윗선까지.
@@ -1025,6 +1032,7 @@ export function HomeScreen({ navigation }: Props) {
                     crown: lovelichelinPulse?.me ?? null,
                     today: mySlices,
                     snack: mySnack,
+                    waterMl: water.mine,
                   }}
                   partner={{
                     name: partner?.partnerName ?? couple?.partner?.name ?? '상대방',
@@ -1040,6 +1048,8 @@ export function HomeScreen({ navigation }: Props) {
                     crown: lovelichelinPulse?.partner ?? null,
                     today: partnerSlices,
                     snack: partnerSnack,
+                    // 내 양을 못 읽었으면 상대 컵도 안 그린다 — 한쪽만 있으면 줄이 비대칭이 된다
+                    waterMl: water.mine == null ? null : water.partner,
                   }}
                   dday={dday}
                   anniversaryDate={couple?.anniversaryDate ?? null}
@@ -1078,6 +1088,13 @@ export function HomeScreen({ navigation }: Props) {
                    * 시트 안 버튼으로 옮겼다. 상대 사진을 크게 볼 자리가 앱 어디에도 없었다(docs/photo-viewing-profile_2026-10-14.md).
                    */
                   onPressPerson={(who) => setProfileWho(who)}
+                  // 물컵 — 내 컵은 +250/−250, 상대 컵은 보기 전용(내 물을 상대 이름으로 남길 수 없다)
+                  onTapWater={water.tap}
+                  onPressPartnerWater={() =>
+                    toast.info(
+                      `${partner?.partnerName ?? couple?.partner?.name ?? '상대'}님은 오늘 물 ${formatNumber(water.partner ?? 0)}ml 마셨어요`,
+                    )
+                  }
                   /*
                    * 운동/식단 칩 — 예전엔 중앙 FAB 로 "탭 안 옮기고 바로 기록"이 가능했다.
                    * FAB 를 없앤 대신 이 칩이 그 역할을 물려받았고, 아래 분기가 그 약속을 지킨다.
