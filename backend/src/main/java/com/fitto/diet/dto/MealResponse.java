@@ -53,7 +53,12 @@ public record MealResponse(
          * 목록 조회(오늘/히스토리)에서만 채우고 저장·수정 응답은 빈 목록이다. 데이트 식단의 상대 명의 복사본은
          * 피드에 원본만 나오므로 <b>원본</b>의 반응을 싣는다 — 안 그러면 피드엔 하트가 있는데 럽바디 카드엔 없다.
          */
-        List<ReactionSummary> reactions
+        List<ReactionSummary> reactions,
+        /**
+         * 이 저장이 간헐적 단식에 미친 일(2026-10-16) — 새 저장 응답에만, 아무 일 없으면 null.
+         * 조회·수정·멱등 재전송 응답은 항상 null 이다(goals 와 같은 일회성 정보).
+         */
+        MealFastingOutcome fasting
 ) {
     /**
      * 영양 목표 달성 — {@code WorkoutResponse.PrHighlight} 와 같은 패턴으로
@@ -94,13 +99,20 @@ public record MealResponse(
                 m.getCarbs(), m.getProtein(), m.getFat(),
                 m.getSugar(), m.getSodium(), m.getFiber(), m.getNutritionSource(),
                 m.getItems().stream().map(MealItemResponse::of).toList(),
-                goals, m.isSharedMeal(), placeId, placeName, m.getCreatedAt(), List.of());
+                goals, m.isSharedMeal(), placeId, placeName, m.getCreatedAt(), List.of(), null);
     }
 
     /** 목록 조회에서 배치로 모은 반응을 얹는다 */
     public MealResponse withReactions(List<ReactionSummary> reactions) {
         return new MealResponse(id, mealDate, mealType, mealTypeLabel, memo, photoUrl, calories, carbs, protein, fat,
                 sugar, sodium, fiber, nutritionSource, items, goals, sharedWithPartner, placeId, placeName, createdAt,
-                reactions);
+                reactions, fasting);
+    }
+
+    /** 저장 응답에 단식 결과를 얹는다 */
+    public MealResponse withFasting(MealFastingOutcome fasting) {
+        return new MealResponse(id, mealDate, mealType, mealTypeLabel, memo, photoUrl, calories, carbs, protein, fat,
+                sugar, sodium, fiber, nutritionSource, items, goals, sharedWithPartner, placeId, placeName, createdAt,
+                reactions, fasting);
     }
 }

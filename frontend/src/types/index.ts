@@ -1299,6 +1299,8 @@ export interface Meal {
   createdAt: string;
   /** 이 끼니에 달린 응원 반응(우리 탭 피드와 같은 데이터, 읽기 전용) — 구서버 응답엔 없다 */
   reactions?: ReactionSummary[] | null;
+  /** 이 저장이 간헐적 단식에 미친 일 — 새 저장 응답에만, 아무 일 없으면 null(2026-10-16) */
+  fasting?: MealFastingOutcome | null;
 }
 
 // 오늘 영양 요약 (목표 대비 섭취) — GET /meal/nutrition
@@ -1456,6 +1458,41 @@ export interface PartnerFasting {
   active: boolean;
   elapsedMin?: number | null;
   targetHours?: number | null;
+}
+
+/**
+ * 식사 저장이 단식에 미친 일(서버 MealFastingOutcome).
+ * ENDED = 이 식사로 단식을 끝냈다(status = 끝난 단식) · ASK_END = 단식 중이지만 끝낼지 묻는다(status = 진행 중) ·
+ * OFFER_START = 저녁 뒤 시작 제안(suggestPlan/Hours = 지난번 플랜)
+ */
+export interface MealFastingOutcome {
+  result: 'ENDED' | 'ASK_END' | 'OFFER_START';
+  status?: FastingStatus | null;
+  suggestPlan?: FastingPlan | null;
+  suggestHours?: number | null;
+}
+
+export type FastingEndReason = 'MANUAL' | 'MEAL';
+
+// 단식 이력 (GET /fasting/history?days=) — 진행 중이면 endedAt 이 null
+export interface FastingHistoryItem {
+  id: number;
+  planType: FastingPlan;
+  planLabel: string;
+  targetHours: number;
+  startedAt: string;
+  endedAt?: string | null;
+  endedBy?: FastingEndReason | null;
+  elapsedMin: number;
+  achieved: boolean;
+}
+
+// 단식 연동 설정 (GET·PUT /fasting/settings)
+export interface FastingSettings {
+  /** 식사를 기록하면 진행 중인 단식을 자동으로 끝낸다 */
+  autoEnd: boolean;
+  /** 저녁을 기록하면 "단식 시작할까요?"를 묻는다(최근 30일 안에 단식해 본 사람에게만) */
+  offerDinner: boolean;
 }
 
 // 식품 DB 조회 (GET /food-db/barcode/{code}, GET /food-db/search) — 그대로 저장되지 않고

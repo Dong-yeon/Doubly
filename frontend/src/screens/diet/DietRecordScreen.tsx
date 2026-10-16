@@ -43,6 +43,7 @@ import { errorCodeOf } from '../../api/client';
 import { uploadApi, wasRejected } from '../../api/upload';
 import { track } from '../../api/analytics';
 import { toast } from '../../store/toastStore';
+import { announceMealFasting } from '../../utils/mealFasting';
 import { IconButton } from '../../components/IconButton';
 import { bareHeaderItems } from '../../navigation/headerOptions';
 import { runBusy } from '../../store/busyStore';
@@ -1467,7 +1468,8 @@ export function DietRecordScreen({ navigation, route }: Props) {
               : '칼로리는 곧 채워져요.'
             : '') +
         placeToastSuffix;
-      toast.success(saveMessage);
+      // 이 식사로 단식이 끝났으면 저장 문구에 붙여 [되돌리기]와 함께 띄운다. 묻기·시작 제안은 루트 다이얼로그라 화면이 닫혀도 뜬다
+      if (!announceMealFasting(saved.fasting, saveMessage)) toast.success(saveMessage);
 
       leftScreenRef.current = true;
       allowLeave();

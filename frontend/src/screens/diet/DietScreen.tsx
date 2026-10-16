@@ -14,11 +14,13 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Alert } from '../../utils/alert';
+import { useFastingSignal } from '../../utils/mealFasting';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -63,6 +65,7 @@ import type {
   DietCoach,
   DietGoalType,
   FastingPlan,
+  FastingSettings,
   FastingStatus,
   MacroPreset,
   Meal,
@@ -197,6 +200,8 @@ function FastingActiveRow({
   const elapsedMin = fasting.startedAt
     ? Math.max(0, Math.floor((now - new Date(fasting.startedAt).getTime()) / 60000))
     : (fasting.elapsedMin ?? 0);
+  // 달성은 경과 시간으로 다시 센다 — 서버 값은 화면을 연 순간의 것이라, 켜 둔 채 목표를 넘기면 "남음"에 머물렀다
+  const achieved = elapsedMin >= (fasting.targetHours ?? 0) * 60;
   return (
     <View style={styles.trackerRow}>
       <View style={styles.trackerText}>
@@ -205,13 +210,14 @@ function FastingActiveRow({
           <Text style={styles.trackerValue}>{formatHM(elapsedMin)} 경과</Text>
         </Text>
         <Text style={styles.trackerSub}>
-          {fasting.achieved
-            ? '목표 달성!'
+          {achieved
+            ? '목표 달성! 식사를 기록하면 자동으로 끝나요'
             : `목표 ${fasting.targetHours}시간 · ${formatHM((fasting.targetHours ?? 0) * 60 - elapsedMin)} 남음`}
           {partnerFasting?.connected && partnerFasting.active
             ? ` · 상대 ${formatHM(partnerFasting.elapsedMin ?? 0)} 경과`
             : ''}
         </Text>
+        <Text style={styles.trackerSub}>{fastingStage(elapsedMin)}</Text>
       </View>
       <Pressable
         style={({ pressed }) => [styles.trackerAction, pressed && styles.stepBtnPressed]}
@@ -223,6 +229,17 @@ function FastingActiveRow({
       </Pressable>
     </View>
   );
+}
+
+/**
+ * 단식 중 몸에서 일어나는 일 — 조심스럽게 말한다(docs/LOVEBODY_FASTING_WATER_ANALYSIS_2026-10-16.md §2-1).
+ * 지방을 주로 쓰기 시작하는 "대사 스위치"는 연구상 12~36시간으로 사람마다 크게 다르다. 자가포식·해독 같은
+ * 시간표는 사람에게서 확인되지 않아 쓰지 않는다. 물은 단식 중에도 괜찮다는 말을 함께 둔다.
+ */
+function fastingStage(elapsedMin: number): string {
+  if (elapsedMin < 4 * 60) return '먹은 걸 소화하는 중이에요 · 물은 마셔도 괜찮아요';
+  if (elapsedMin < 12 * 60) return '저장해 둔 당을 꺼내 쓰는 중이에요 · 물 한 잔 어때요?';
+  return '지방을 더 쓰기 시작할 수 있는 구간이에요(개인차가 커요)';
 }
 
 /**
@@ -434,6 +451,37 @@ export function DietScreen({ navigation, route }: Props) {
     // 상대 진행 상태는 곁들이는 정보라 실패해도 줄을 비우기만 한다
     fastingApi.partner().then(setPartnerFasting).catch(() => setPartnerFasting(null));
   }, []);
+  // 식사 기록 뒤 되돌리기·시작 제안처럼 이 화면 밖에서 단식이 바뀌면 다시 받는다(utils/mealFasting)
+  const fastingSignal = useFastingSignal((s) => s.version);
+  useEffect(() => {
+    if (fastingSignal > 0) refreshFasting();
+  }, [fastingSignal, refreshFasting]);
+  // 끼니 연동 설정 — 시작 모달을 열 때 받는다. 못 받으면 스위치를 숨긴다(켜짐이라고 거짓말하지 않는다)
+  const [fastingSettings, setFastingSettings] = useState<FastingSettings | null>(null);
+  useEffect(() => {
+    if (!fastingModal) return;
+    fastingApi.settings().then(setFastingSettings).catch(() => setFastingSettings(null));
+  }, [fastingModal]);
+  /*
+   * 연타 대비: 요청을 한 줄로 세워 보내고(서버에 마지막 누름이 마지막으로 닿게) 화면은 누른 즉시 바꾼다.
+   * 응답은 가장 나중 요청의 것만 반영한다 — 순서 없이 반영하면 서버는 꺼짐인데 화면은 켜짐으로 남았다(2026-10-16 연타 테스트).
+   */
+  const settingsQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const settingsSeq = useRef(0);
+  const onToggleFastingSetting = (patch: Partial<FastingSettings>) => {
+    const seq = ++settingsSeq.current;
+    setFastingSettings((s) => (s ? { ...s, ...patch } : s));
+    settingsQueue.current = settingsQueue.current
+      .then(() => fastingApi.updateSettings(patch))
+      .then((saved) => {
+        if (seq === settingsSeq.current) setFastingSettings(saved);
+      })
+      .catch((e) => {
+        toast.error(getErrorMessage(e, '설정을 바꾸지 못했어요.'));
+        // 무엇이 저장됐는지 모르므로 서버 값으로 맞춘다
+        fastingApi.settings().then(setFastingSettings).catch(() => setFastingSettings(null));
+      });
+  };
 
   /*
    * 오늘 운동 기록 — 상단 체크인 카드가 "챙겼는지"를 이 값으로 가른다. 카드가 스스로
@@ -1419,6 +1467,40 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
                 style={styles.customFastingBtn}
               />
             </View>
+            {fastingSettings ? (
+              <>
+                <View style={styles.fastingSettingRow}>
+                  <View style={styles.fastingSettingText}>
+                    <Text style={styles.wizardLabel}>식사를 기록하면 자동으로 끝내기</Text>
+                    <Text style={styles.fastingSettingHint}>시작 4시간 안의 기록은 끝낼지 물어봐요</Text>
+                  </View>
+                  <Switch
+                    value={fastingSettings.autoEnd}
+                    onValueChange={(v) => onToggleFastingSetting({ autoEnd: v })}
+                    trackColor={{ true: colors.primaryFill }}
+                    thumbColor={fastingSettings.autoEnd ? onColor(colors.primaryFill) : colors.white}
+                    accessibilityLabel="식사를 기록하면 단식 자동으로 끝내기"
+                  />
+                </View>
+                <View style={styles.fastingSettingRow}>
+                  <View style={styles.fastingSettingText}>
+                    <Text style={styles.wizardLabel}>저녁을 기록하면 시작할지 묻기</Text>
+                    <Text style={styles.fastingSettingHint}>최근 한 달 안에 단식해 본 적 있을 때만 물어봐요</Text>
+                  </View>
+                  <Switch
+                    value={fastingSettings.offerDinner}
+                    onValueChange={(v) => onToggleFastingSetting({ offerDinner: v })}
+                    trackColor={{ true: colors.primaryFill }}
+                    thumbColor={fastingSettings.offerDinner ? onColor(colors.primaryFill) : colors.white}
+                    accessibilityLabel="저녁을 기록하면 단식 시작할지 묻기"
+                  />
+                </View>
+              </>
+            ) : null}
+            {/* 하면 안 되는 사람(§2-4) — 막지는 않고 알린다 */}
+            <Text style={styles.fastingSettingHint}>
+              임신·수유 중이거나 섭식장애를 겪은 적 있거나 당뇨약·인슐린을 쓰고 있다면, 시작하기 전에 의사와 상의해 주세요.
+            </Text>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1567,6 +1649,9 @@ const styles = themedStyles((colors) => ({
   customFastingRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' },
   customFastingInput: { flex: 1 },
   customFastingBtn: { marginBottom: 2 },
+  fastingSettingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  fastingSettingText: { flex: 1 },
+  fastingSettingHint: { fontSize: fontSize.caption, color: colors.textSecondary, marginTop: spacing.xs },
   aiRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   aiBtn: { flex: 1 },
   aiHeadline: { fontSize: fontSize.body, fontWeight: '800', color: colors.textPrimary, lineHeight: 22 },

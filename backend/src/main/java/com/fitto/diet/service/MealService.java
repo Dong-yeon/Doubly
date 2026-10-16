@@ -20,6 +20,7 @@ import com.fitto.diet.domain.NutritionGoal;
 import com.fitto.diet.dto.CoupleMealGoalResponse;
 import com.fitto.diet.dto.FoodLookupRequest;
 import com.fitto.diet.dto.FoodLookupResponse;
+import com.fitto.diet.dto.MealFastingOutcome;
 import com.fitto.diet.dto.MealItemRequest;
 import com.fitto.diet.dto.MealResponse;
 import com.fitto.diet.dto.PartnerMealTodayResponse;
@@ -97,6 +98,8 @@ public class MealService {
     private final SimpMessagingTemplate messagingTemplate;
     /** 기록 삭제 시 사진까지 지운다 — DB 행만 지우면 이미지는 URL 로 계속 접근 가능하다 */
     private final CloudinaryImageDeleter imageDeleter;
+    /** 식사 저장 → 진행 중 단식 자동 종료·저녁 뒤 시작 제안(2026-10-16) */
+    private final FastingService fastingService;
 
     /**
      * 채팅 카드 본문의 목표 달성 접두어 — 프론트 채팅 렌더러(dietShare.ts 의 GOAL_SHARE_PREFIX)가
@@ -118,7 +121,8 @@ public class MealService {
                        MealPhotoAutoAnalysisService autoAnalysisService,
                        ChatService chatService,
                        SimpMessagingTemplate messagingTemplate,
-                       CloudinaryImageDeleter imageDeleter) {
+                       CloudinaryImageDeleter imageDeleter,
+                       FastingService fastingService) {
         this.mealRepository = mealRepository;
         this.mealItemRepository = mealItemRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
@@ -134,6 +138,7 @@ public class MealService {
         this.chatService = chatService;
         this.messagingTemplate = messagingTemplate;
         this.imageDeleter = imageDeleter;
+        this.fastingService = fastingService;
     }
 
     @Transactional
@@ -252,7 +257,21 @@ public class MealService {
          * 그쪽에서 함께 채우므로 이 호출 하나로 끝난다. 고른 장소(placeId)는 분석 힌트로만 넘긴다.
          */
         autoAnalysisService.scheduleIfEligible(userId, meal, req.placeId());
-        return MealResponse.from(meal, goals);
+        return MealResponse.from(meal, goals).withFasting(fastingAfterMeal(userId, meal));
+    }
+
+    /**
+     * 간헐적 단식 연동 — 저장 경로 4곳(기록 화면·홈 사진·보관함 재시도·외식 기록)이 모두 여기를 지난다.
+     * 데이트 식단이어도 기록한 사람의 단식만 본다(상대 단식은 상대가 모르는 새 끝내지 않는다).
+     * 단식 쪽 오류는 삼킨다 — 식단은 이미 저장됐고, 단식 때문에 식사 기록이 실패하면 안 된다.
+     */
+    private MealFastingOutcome fastingAfterMeal(Long userId, Meal meal) {
+        try {
+            return fastingService.onMealSaved(userId, meal.getMealDate(), meal.getMealType());
+        } catch (RuntimeException e) {
+            log.warn("식사 저장 뒤 단식 연동 실패 — userId={}, mealId={}", userId, meal.getId(), e);
+            return null;
+        }
     }
 
     /**

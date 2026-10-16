@@ -48,7 +48,7 @@ class FastingFlowTest {
     void 프리셋으로_시작하면_기본_시간이_적용된다() {
         Long user = register("fst2@fitto.com");
 
-        FastingStatusResponse res = fastingService.start(user, new StartFastingRequest(FastingPlan.SIXTEEN_EIGHT, null));
+        FastingStatusResponse res = fastingService.start(user, new StartFastingRequest(FastingPlan.SIXTEEN_EIGHT, null, null));
 
         assertThat(res.active()).isTrue();
         assertThat(res.targetHours()).isEqualTo(16);
@@ -59,9 +59,9 @@ class FastingFlowTest {
     @Test
     void 이미_진행_중이면_다시_시작할_수_없다() {
         Long user = register("fst3@fitto.com");
-        fastingService.start(user, new StartFastingRequest(FastingPlan.SIXTEEN_EIGHT, null));
+        fastingService.start(user, new StartFastingRequest(FastingPlan.SIXTEEN_EIGHT, null, null));
 
-        assertThatThrownBy(() -> fastingService.start(user, new StartFastingRequest(FastingPlan.EIGHTEEN_SIX, null)))
+        assertThatThrownBy(() -> fastingService.start(user, new StartFastingRequest(FastingPlan.EIGHTEEN_SIX, null, null)))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -69,14 +69,14 @@ class FastingFlowTest {
     void 커스텀은_목표_시간이_필수다() {
         Long user = register("fst4@fitto.com");
 
-        assertThatThrownBy(() -> fastingService.start(user, new StartFastingRequest(FastingPlan.CUSTOM, null)))
+        assertThatThrownBy(() -> fastingService.start(user, new StartFastingRequest(FastingPlan.CUSTOM, null, null)))
                 .isInstanceOf(BusinessException.class);
     }
 
     @Test
     void 종료하면_비활성으로_돌아가고_다시_시작할_수_있다() {
         Long user = register("fst5@fitto.com");
-        fastingService.start(user, new StartFastingRequest(FastingPlan.CUSTOM, 12));
+        fastingService.start(user, new StartFastingRequest(FastingPlan.CUSTOM, 12, null));
 
         FastingStatusResponse ended = fastingService.end(user);
         assertThat(ended.active()).isFalse();
@@ -85,7 +85,7 @@ class FastingFlowTest {
         assertThat(afterEnd.active()).isFalse();
 
         // 새로 시작할 수 있어야 한다(이전 세션은 이미 종료됨)
-        FastingStatusResponse restarted = fastingService.start(user, new StartFastingRequest(FastingPlan.OMAD, null));
+        FastingStatusResponse restarted = fastingService.start(user, new StartFastingRequest(FastingPlan.OMAD, null, null));
         assertThat(restarted.active()).isTrue();
     }
 
@@ -107,7 +107,7 @@ class FastingFlowTest {
         assertThat(before.connected()).isTrue();
         assertThat(before.active()).isFalse();
 
-        fastingService.start(b, new StartFastingRequest(FastingPlan.EIGHTEEN_SIX, null));
+        fastingService.start(b, new StartFastingRequest(FastingPlan.EIGHTEEN_SIX, null, null));
         PartnerFastingResponse after = fastingService.partner(a);
         assertThat(after.active()).isTrue();
         assertThat(after.targetHours()).isEqualTo(18);

@@ -72,6 +72,7 @@ import { daysSince, formatMonthDay, localDateOf, todayKst } from '../../utils/da
 import { mealTypeForNow, mealTypeLabel } from '../../utils/mealTimeSlot';
 import { haptics } from '../../utils/haptics';
 import { toast } from '../../store/toastStore';
+import { announceMealFasting } from '../../utils/mealFasting';
 import { runBusy } from '../../store/busyStore';
 import { getErrorMessage } from '../../utils/error';
 import { Alert } from '../../utils/alert';
@@ -420,6 +421,12 @@ export function HomeScreen({ navigation }: Props) {
      */
     const filling = autoAnalyzeMealPhoto ? ' 칼로리는 곧 채워져요.' : '';
     const head = retried ? `올리지 못했던 ${mealTypeLabel(mealType)} 사진을 기록했어요!` : `${mealTypeLabel(mealType)} 기록했어요!`;
+    /*
+     * 이 식사로 단식이 끝났으면 그 토스트가 먼저다 — 자동으로 한 일이라 [되돌리기]가 붙어야 하고, 토스트 버튼 자리는
+     * 하나뿐이다. 그 경우 "같이 먹었어요"는 빠진다(단식을 끝내는 첫 식사 한 번뿐이다).
+     * 묻기·시작 제안은 다이얼로그라 아래 토스트와 함께 뜬다.
+     */
+    if (announceMealFasting(saved.fasting, `${head}${filling}`)) return;
     /*
      * 둘이 먹었는지는 저장하고 <b>나서</b> 묻는다. 사진을 고르기 전에 물으면 시트가 두 단이
      * 되는데, 이 경로의 존재 이유가 탭을 줄이는 것이라 그 순간 의미가 없어진다. 안 누르고

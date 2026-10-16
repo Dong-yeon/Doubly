@@ -2,6 +2,9 @@ package com.fitto.diet.controller;
 
 import com.fitto.common.response.ApiResponse;
 import com.fitto.common.security.AuthUser;
+import com.fitto.diet.dto.FastingHistoryItem;
+import com.fitto.diet.dto.FastingSettingsRequest;
+import com.fitto.diet.dto.FastingSettingsResponse;
 import com.fitto.diet.dto.FastingStatusResponse;
 import com.fitto.diet.dto.PartnerFastingResponse;
 import com.fitto.diet.dto.StartFastingRequest;
@@ -10,9 +13,13 @@ import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /** 간헐적 단식 타이머 API — 커플 상대방 진행 상태 조회를 포함한다. */
 @RestController
@@ -44,5 +51,28 @@ public class FastingController {
     @GetMapping("/partner")
     public ApiResponse<PartnerFastingResponse> partner(@AuthenticationPrincipal AuthUser user) {
         return ApiResponse.success(fastingService.partner(user.id()));
+    }
+
+    /** 식사 기록으로 자동 종료된 단식을 되돌린다(토스트의 [되돌리기]) */
+    @PostMapping("/reopen")
+    public ApiResponse<FastingStatusResponse> reopen(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(fastingService.reopen(user.id()), "단식을 이어갈게요.");
+    }
+
+    @GetMapping("/history")
+    public ApiResponse<List<FastingHistoryItem>> history(@AuthenticationPrincipal AuthUser user,
+                                                         @RequestParam(defaultValue = "28") int days) {
+        return ApiResponse.success(fastingService.history(user.id(), days));
+    }
+
+    @GetMapping("/settings")
+    public ApiResponse<FastingSettingsResponse> settings(@AuthenticationPrincipal AuthUser user) {
+        return ApiResponse.success(fastingService.settings(user.id()));
+    }
+
+    @PutMapping("/settings")
+    public ApiResponse<FastingSettingsResponse> updateSettings(@AuthenticationPrincipal AuthUser user,
+                                                               @RequestBody FastingSettingsRequest request) {
+        return ApiResponse.success(fastingService.updateSettings(user.id(), request));
     }
 }
