@@ -245,3 +245,4 @@ interface FastingState {
   fingerprint Android `700b96c0…`·iOS `d75619b0…` = 1.0.7 production 빌드와 일치.
   update group: iOS `bba44b6a-bc59-4f9c-ae92-c201eba3caed`, Android `62acdbfb-e49e-4412-8be8-fbf5da3523a2`.
 - 남은 것: 실기기 확인(§11 "확인 못 한 것"), 운영 DB 중복 진행 단식 확인 SQL(§11).
+- 운영 중복 확인(2026-10-16 점심, 사용자 실행): 0행. 옛 코드는 중복이 생기면 종료·자동 종료가 모두 예외라 중복이 스스로 닫힐 수 없었다 → 시간대와 무관하게 "지금까지 한 번도 안 생겼다"로 읽어도 된다.
