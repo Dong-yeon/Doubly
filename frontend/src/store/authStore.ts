@@ -16,6 +16,7 @@ import { usePlaceStore } from './placeStore';
 import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
 import { useRelationStore } from './relationStore';
+import { useWaterStore } from './waterStore';
 import { clearAllWritingDrafts } from '../utils/writingDraft';
 import { clearPendingMealPhotos } from '../utils/pendingMealPhotos';
 import { discardExportFiles } from '../utils/exportStorage';
@@ -72,6 +73,8 @@ async function clearTokens() {
   useContentStore.getState().reset();
   useCoupleEmojiStore.getState().reset();
   useRelationStore.getState().reset();
+  // 오늘 물 양(내 것·상대 것)과 안 보낸 탭 — 다음 계정에 남거나 다음 계정 이름으로 올라가면 안 된다
+  useWaterStore.getState().reset();
 }
 
 /**
