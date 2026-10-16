@@ -39,6 +39,8 @@ import { usePlaceStore } from '../../store/placeStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { useRelationStore } from '../../store/relationStore';
 import { useDeleteAction } from '../../hooks/useDeleteAction';
+import { useWaterSync } from '../../hooks/useWaterSync';
+import { shownWaterMl, useWaterStore } from '../../store/waterStore';
 import { dietApi } from '../../api/diet';
 import { analyticsApi } from '../../api/analytics';
 import { waterApi } from '../../api/water';
@@ -75,7 +77,6 @@ import type {
   NutritionSummary,
   PartnerFasting,
   Streak,
-  WaterSummary,
   WeeklyLetter,
 } from '../../types';
 import { themedStyles } from '../../theme/themedStyles';
@@ -429,19 +430,27 @@ export function DietScreen({ navigation, route }: Props) {
   /** 목표 모달이 뜨고 나서 마법사를 이어 연다 — 모달 둘을 한 번에 띄우면 iOS 가 뒤의 것을 버린다 */
   const wizardAfterNutRef = useRef(false);
 
-  // 물 섭취 트래커
-  const [water, setWater] = useState<WaterSummary | null>(null);
+  /*
+   * 물 섭취 트래커 — 값은 홈 물컵과 같은 store/waterStore 다. 화면 값 = 서버 값 + 아직 안 보낸 탭이라, 홈에서 누르고 곧장
+   * 들어와도(홈의 보내기와 여기 조회가 동시에 출발해도) 같은 숫자를 본다(docs/HOME_WATER_TAP_ANALYSIS_2026-10-16.md §13).
+   */
+  const waterSummary = useWaterStore((s) => s.summary);
+  const waterShown = useWaterStore(shownWaterMl);
+  const water = useMemo(
+    () => (waterSummary && waterShown != null ? { ...waterSummary, consumedMl: waterShown } : null),
+    [waterSummary, waterShown],
+  );
   const [waterState, setWaterState] = useState<LoadState>('loading');
   // 실패해도 이미 보이던 값은 지우지 않는다 — 새로고침 한 번 실패로 카드가 사라지면 안 된다
   const refreshWater = useCallback(() => {
-    waterApi
-      .today()
-      .then((w) => {
-        setWater(w);
-        setWaterState('ok');
-      })
+    useWaterStore
+      .getState()
+      .load()
+      .then(() => setWaterState('ok'))
       .catch(() => setWaterState((st) => (st === 'ok' ? 'ok' : 'error')));
   }, []);
+  // 읽기는 위 refreshWater(refreshExtras) 가 하고, 이 훅은 떠날 때·뒤로 갈 때 안 보낸 탭을 보낸다
+  useWaterSync({ load: false });
 
   // 간헐적 단식 타이머
   const [fasting, setFasting] = useState<FastingStatus | null>(null);
@@ -479,7 +488,7 @@ export function DietScreen({ navigation, route }: Props) {
     waterGoalSaving.current = true;
     setWaterGoalBusy(true);
     try {
-      setWater(await waterApi.setGoal(Math.round(ml)));
+      useWaterStore.getState().absorb(await waterApi.setGoal(Math.round(ml)));
       haptics.success();
       setWaterGoalModal(false);
       toast.success(`물 목표를 ${formatNumber(Math.round(ml))}ml 로 바꿨어요`);
@@ -656,15 +665,9 @@ export function DietScreen({ navigation, route }: Props) {
     setWizardModal(false);
   };
 
-  // 물 섭취 +/- — 실패해도 조용히 되돌리지 않고 에러만 안내(연타 시 중복 요청은 서버가 누적 처리)
-  const onAddWater = async (amountMl: number) => {
-    try {
-      const res = await waterApi.add(amountMl);
-      setWater(res);
-      haptics.light();
-    } catch (e) {
-      toast.error(getErrorMessage(e, '물 섭취 기록에 실패했어요.'));
-    }
+  // 물 섭취 +/- — 바로 화면에 반영하고, 연타는 스토어가 모아 한 번에 보낸다. 실패하면 스토어가 되돌리고 알린다(햅틱도 스토어)
+  const onAddWater = (amountMl: number) => {
+    useWaterStore.getState().tap(amountMl);
   };
 
   const onStartFasting = async (planType: FastingPlan) => {

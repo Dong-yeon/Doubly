@@ -17,6 +17,7 @@ import { useContentStore } from './contentStore';
 import { useCoupleEmojiStore } from './coupleEmojiStore';
 import { useCurrencyStore } from './currencyStore';
 import { useRelationStore } from './relationStore';
+import { useWaterStore } from './waterStore';
 import { clearAllWritingDrafts } from '../utils/writingDraft';
 import { clearPendingMealPhotos } from '../utils/pendingMealPhotos';
 import { discardExportFiles } from '../utils/exportStorage';
@@ -75,6 +76,8 @@ async function clearTokens() {
   // 재화 잔액은 개인 것 — 다음 계정에 남의 잔액이 보이면 안 된다
   useCurrencyStore.getState().reset();
   useRelationStore.getState().reset();
+  // 오늘 물 양(내 것·상대 것)과 안 보낸 탭 — 다음 계정에 남거나 다음 계정 이름으로 올라가면 안 된다
+  useWaterStore.getState().reset();
 }
 
 /**

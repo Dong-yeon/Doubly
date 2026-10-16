@@ -11,6 +11,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** 물 섭취 트래커 — H2 기반. */
@@ -82,5 +90,57 @@ class WaterFlowTest {
 
         assertThat(res.coupleConnected()).isTrue();
         assertThat(res.partnerConsumedMl()).isEqualTo(500);
+    }
+
+    /** 동시에 n 번 더한다 — 모두 한 출발선에서 풀어 실제로 겹치게 한다. 실패한 요청이 있으면 그 예외로 테스트가 깨진다 */
+    private void addConcurrently(Long user, int times, int deltaMl) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(times);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < times; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return waterService.add(user, deltaMl);
+                }));
+            }
+            start.countDown();
+            for (Future<?> f : futures) f.get(30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * 그날 첫 요청이 둘 이상 겹치면 모두 "행 없음"을 보고 INSERT 한다 — 예전엔 진 쪽이 unique 위반으로 500 이었다.
+     * 이제 진 쪽은 UPDATE 로 다시 더해 하나도 잃지 않는다.
+     */
+    @Test
+    void 그날_첫_요청이_동시에_와도_모두_더해진다() throws Exception {
+        Long user = register("wtrr1@fitto.com");
+
+        addConcurrently(user, 4, 250);
+
+        assertThat(waterService.today(user).consumedMl()).isEqualTo(1000);
+    }
+
+    /** 예전엔 읽고-더하고-쓰기라 같은 값을 읽은 요청끼리 덮어써 조용히 사라졌다(lost update) */
+    @Test
+    void 연타가_동시에_와도_하나도_잃지_않는다() throws Exception {
+        Long user = register("wtrr2@fitto.com");
+        waterService.add(user, 250);
+
+        addConcurrently(user, 10, 250);
+
+        assertThat(waterService.today(user).consumedMl()).isEqualTo(2750);
+    }
+
+    @Test
+    void 행이_없는_날_음수로_시작해도_0이다() {
+        Long user = register("wtrr3@fitto.com");
+
+        WaterSummaryResponse res = waterService.add(user, -250);
+
+        assertThat(res.consumedMl()).isZero();
     }
 }

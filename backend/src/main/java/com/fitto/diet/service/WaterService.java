@@ -11,10 +11,15 @@ import com.fitto.relation.domain.RelationType;
 import com.fitto.relation.repository.RelationRepository;
 import com.fitto.user.repository.UserRepository;
 import com.fitto.common.time.KstClock;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -34,12 +39,21 @@ public class WaterService {
     private final RelationRepository relationRepository;
     private final UserRepository userRepository;
 
+    /** {@link #add} 의 단계별 쓰기 트랜잭션 */
+    private final TransactionTemplate writeTx;
+    /** {@link #add} 끝의 요약 조회 — 자기 호출이라 프록시의 readOnly 가 안 걸리므로 직접 연다 */
+    private final TransactionTemplate readTx;
+
     public WaterService(WaterLogRepository waterLogRepository, NutritionGoalRepository nutritionGoalRepository,
-                        RelationRepository relationRepository, UserRepository userRepository) {
+                        RelationRepository relationRepository, UserRepository userRepository,
+                        PlatformTransactionManager transactionManager) {
         this.waterLogRepository = waterLogRepository;
         this.nutritionGoalRepository = nutritionGoalRepository;
         this.relationRepository = relationRepository;
         this.userRepository = userRepository;
+        this.writeTx = new TransactionTemplate(transactionManager);
+        this.readTx = new TransactionTemplate(transactionManager);
+        this.readTx.setReadOnly(true);
     }
 
     public WaterSummaryResponse today(Long userId) {
@@ -64,14 +78,31 @@ public class WaterService {
         return new WaterSummaryResponse(consumed, target, true, partnerName, partnerConsumed);
     }
 
-    @Transactional
+    /**
+     * 물 증감 — 동시에 와도 하나도 잃지 않는다(docs/HOME_WATER_TAP_ANALYSIS_2026-10-16.md §3-2).
+     *
+     * <p>예전엔 행을 읽어 엔티티에 더했다. 동시 요청 둘이 같은 750 을 읽고 둘 다 1000 을 쓰면 250 이 조용히 사라졌고,
+     * 그날 첫 두 요청이 겹치면 둘 다 "행 없음"을 보고 INSERT 해 unique(user_id, log_date) 위반으로 500 이 났다.
+     * 홈 물컵(탭할 때마다 +250)과 두 기기 동시 사용이 이걸 흔하게 만든다.
+     *
+     * <p>그래서 ① 원자적 UPDATE ② 행이 없으면 INSERT ③ 그 INSERT 가 동시 도착에 졌으면(unique 위반) 다시 UPDATE.
+     * 단계마다 <b>트랜잭션을 따로</b> 연다 — PostgreSQL 은 제약 위반이 난 트랜잭션을 통째로 abort 시켜, 같은 트랜잭션에서
+     * 이어지는 UPDATE 가 "current transaction is aborted" 로 실패한다. ON CONFLICT 는 H2 와 함께 못 쓰므로(CLAUDE.md 4절) 쓰지 않는다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public WaterSummaryResponse add(Long userId, int deltaMl) {
         LocalDate today = KstClock.today();
-        WaterLog log = waterLogRepository.findByUserIdAndLogDate(userId, today)
-                .orElseGet(() -> waterLogRepository.save(
-                        WaterLog.builder().userId(userId).logDate(today).amountMl(0).build()));
-        log.add(deltaMl);
-        return today(userId);
+        Integer updated = writeTx.execute(s -> waterLogRepository.addAmount(userId, today, deltaMl, LocalDateTime.now()));
+        if (updated == null || updated == 0) {
+            try {
+                writeTx.executeWithoutResult(s -> waterLogRepository.saveAndFlush(
+                        WaterLog.builder().userId(userId).logDate(today).amountMl(Math.max(0, deltaMl)).build()));
+            } catch (DataIntegrityViolationException raced) {
+                // 같은 순간 다른 요청이 그날 행을 먼저 만들었다 — 이제 행이 있으니 더하기만 하면 된다
+                writeTx.execute(s -> waterLogRepository.addAmount(userId, today, deltaMl, LocalDateTime.now()));
+            }
+        }
+        return readTx.execute(s -> today(userId));
     }
 
     @Transactional
