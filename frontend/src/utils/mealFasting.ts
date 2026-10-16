@@ -80,7 +80,7 @@ async function endFast() {
     toast.success(
       res.achieved
         ? `🎉 ${res.targetHours}시간 단식 성공!`
-        : `단식을 ${formatFastingDuration(res.elapsedMin ?? 0)}로 끝냈어요`,
+        : `단식을 ${formatFastingDuration(res.elapsedMin ?? 0)}으로 끝냈어요`, // "시간"·"분" 모두 받침 → 으로
     );
   } catch (e) {
     toast.error(getErrorMessage(e, '단식 종료에 실패했어요.'));
@@ -113,7 +113,7 @@ export function announceMealFasting(outcome: MealFastingOutcome | null | undefin
     const s = outcome.status;
     const line = s.achieved
       ? `🎉 ${s.targetHours}시간 단식 성공(${formatFastingDuration(s.elapsedMin ?? 0)})`
-      : `단식은 ${formatFastingDuration(s.elapsedMin ?? 0)}로 끝냈어요`;
+      : `단식은 ${formatFastingDuration(s.elapsedMin ?? 0)}으로 끝냈어요`;
     // 토스트 슬롯이 하나라 저장 문구와 합친다 — 따로 띄우면 앞의 것이 곧바로 덮인다
     toast.success(`${line} · ${saveMessage}`.trim(), { label: '되돌리기', onPress: reopenFast });
     bump();
@@ -121,9 +121,10 @@ export function announceMealFasting(outcome: MealFastingOutcome | null | undefin
   }
 
   if (outcome.result === 'ASK_END' && outcome.status) {
+    const elapsed = outcome.status.elapsedMin ?? 0;
     Alert.alert(
       '단식 중이에요',
-      `${formatFastingDuration(outcome.status.elapsedMin ?? 0)} 지났어요. 이 식사로 단식을 끝낼까요?`,
+      `${elapsed < 1 ? '방금 시작한 단식이에요' : `시작한 지 ${formatFastingDuration(elapsed)} 지났어요`}. 이 식사로 단식을 끝낼까요?`,
       [
         { text: '끝내기', onPress: endFast },
         { text: '계속할게요', style: 'cancel' },

@@ -462,15 +462,25 @@ export function DietScreen({ navigation, route }: Props) {
     if (!fastingModal) return;
     fastingApi.settings().then(setFastingSettings).catch(() => setFastingSettings(null));
   }, [fastingModal]);
-  const onToggleFastingSetting = async (patch: Partial<FastingSettings>) => {
-    const prev = fastingSettings;
-    if (prev) setFastingSettings({ ...prev, ...patch });
-    try {
-      setFastingSettings(await fastingApi.updateSettings(patch));
-    } catch (e) {
-      setFastingSettings(prev);
-      toast.error(getErrorMessage(e, '설정을 바꾸지 못했어요.'));
-    }
+  /*
+   * 연타 대비: 요청을 한 줄로 세워 보내고(서버에 마지막 누름이 마지막으로 닿게) 화면은 누른 즉시 바꾼다.
+   * 응답은 가장 나중 요청의 것만 반영한다 — 순서 없이 반영하면 서버는 꺼짐인데 화면은 켜짐으로 남았다(2026-10-16 연타 테스트).
+   */
+  const settingsQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const settingsSeq = useRef(0);
+  const onToggleFastingSetting = (patch: Partial<FastingSettings>) => {
+    const seq = ++settingsSeq.current;
+    setFastingSettings((s) => (s ? { ...s, ...patch } : s));
+    settingsQueue.current = settingsQueue.current
+      .then(() => fastingApi.updateSettings(patch))
+      .then((saved) => {
+        if (seq === settingsSeq.current) setFastingSettings(saved);
+      })
+      .catch((e) => {
+        toast.error(getErrorMessage(e, '설정을 바꾸지 못했어요.'));
+        // 무엇이 저장됐는지 모르므로 서버 값으로 맞춘다
+        fastingApi.settings().then(setFastingSettings).catch(() => setFastingSettings(null));
+      });
   };
 
   /*
