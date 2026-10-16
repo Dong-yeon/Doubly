@@ -59,6 +59,7 @@ import { useAuthStore } from '../../store/authStore';
 import { pickImage, uploadImage } from '../../utils/imageUpload';
 import { getErrorMessage } from '../../utils/error';
 import { toast } from '../../store/toastStore';
+import { announceMealFasting } from '../../utils/mealFasting';
 import { runBusy } from '../../store/busyStore';
 import { haptics } from '../../utils/haptics';
 import { todayKst } from '../../utils/date';
@@ -282,9 +283,9 @@ export function PlaceDetailScreen({ route, navigation }: Props) {
         setFanfareTier(res.place.lovelichelinTier);
       } else {
         const base = res.meal ? '방문 기록과 식단을 함께 남겼어요!' : '방문 기록 완료!';
-        toast.success(
-          rating > 0 && !hadMyRating ? `${base} 내 럽슐랭 평가도 ${stars(rating)} 로 정했어요.` : base,
-        );
+        const message = rating > 0 && !hadMyRating ? `${base} 내 럽슐랭 평가도 ${stars(rating)} 로 정했어요.` : base;
+        // 식단까지 남겼으면 단식 연동 결과도 함께(utils/mealFasting). 등급 팡파르 때는 화면이 겹쳐 생략한다 — 단식은 서버에서 이미 처리됐다
+        if (!announceMealFasting(res.meal?.fasting, message)) toast.success(message);
       }
       haptics.success();
       load();
