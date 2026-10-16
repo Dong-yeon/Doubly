@@ -236,3 +236,12 @@ interface FastingState {
 - `CoupleHero` 는 `myFasting` 을 **내 열에만** 넘긴다(상대 열에는 통로 자체가 없다). `HomeScreen.refresh()`(포커스·커플 이벤트)에서 스토어 load.
 - 확인: `npm run typecheck` 통과, 바뀐 파일 lint 오류 0(경고 2건은 HomeScreen 기존 haptics 중복 import). 카운트다운 계산 경계(방금·30초 남음→1분·정확히 0→달성·31h59→달성·32h→방치·기기 시계 늦음→목표로 자름·KST 자정 넘김)를 노드로 확인.
 - **확인 못 한 것**: 웹·실기기 화면(로컬 Docker·서버가 꺼져 있어 띄우지 않았다) — 320 폭에서 열 높이, 정각 분 감소, 다른 기기 종료 반영, 홈 사진 저장으로 자동 종료 시 줄 사라짐. OTA 전/후 실기기에서 볼 것.
+
+## 12. 배포 (2026-10-16)
+- 서버: main `f9d8f4df` 푸시 → Railway 자동 배포(watch path `/backend/**`, 마이그레이션 없음).
+- OTA: production — 소스 **`a87c7f63`(태그 `ota/2026-10-16-fasting-countdown`)** = `ota/2026-10-16-water-pill`(`eefcc5a5`) 위에 앱 커밋 `6e938220` 만 체리픽.
+  재화 P1(`d70087bc`, OTA 보류)은 계속 제외 — main 과의 frontend 차이는 재화 파일 10개뿐. **다음 OTA 도 이 태그 위에 체리픽**한다.
+  분리 워크트리 + `npm ci`, TEMP/TMP 세션 전용. typecheck 통과, `USE_LOCAL_BACKEND = false`.
+  fingerprint Android `700b96c0…`·iOS `d75619b0…` = 1.0.7 production 빌드와 일치.
+  update group: iOS `bba44b6a-bc59-4f9c-ae92-c201eba3caed`, Android `62acdbfb-e49e-4412-8be8-fbf5da3523a2`.
+- 남은 것: 실기기 확인(§11 "확인 못 한 것"), 운영 DB 중복 진행 단식 확인 SQL(§11).
