@@ -149,6 +149,12 @@
 - 로컬 JVM 이 KST 면 응답 시각(Z 표기)이 9시간 어긋나 화면 경과가 0으로 보인다 — 운영(UTC)과 무관한 로컬 함정. 로컬 검증은 `JAVA_TOOL_OPTIONS=-Duser.timezone=UTC` 로 띄운다.
 - 확인 못 한 것: 홈 사진 바로 저장 경로(사진 업로드 필요)·럽슐랭 방문 경로의 화면, 실기기(네이티브 다이얼로그), 실제 푸시 수신.
 
+**배포 (2026-10-16)**
+- 서버: main `617696b6` → Railway SUCCESS(V145).
+- OTA: production — 소스 **`fa693fbd`(태그 `ota/2026-10-16-fasting`)** = `ota/2026-10-15-explore` 위에 앱 커밋 `f46db475`·`640a281f` 만. main 의 재화 P1(`d70087bc`, OTA 보류)은 여전히 제외 — 다음에 main 으로 OTA 를 올리면 같이 나간다.
+  fingerprint Android `700b96c0`·iOS `d75619b0` = 1.0.7 production 빌드와 일치. update group: iOS `301e385c`, Android `ef5c8107`.
+- 옛 앱 + 새 서버: 응답에 `fasting` 필드가 늘었을 뿐이라 영향 없음(단식은 서버가 끝내고, 화면은 다음 진입 때 반영).
+
 **남은 것**: P1(끝 결과 카드·물 목표 UI·물 이력·주간 요약), P2(4주 비교·체중 겹쳐 보기 — 무료, 커플 "둘 다 채운 날").
 
 ## 출처
