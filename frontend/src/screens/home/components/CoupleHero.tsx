@@ -267,13 +267,12 @@ function PersonColumn({
           onPress={() => onPressToday('meal')}
         />
         {/*
-          물컵 — 이 줄의 세 번째이자 <b>마지막</b> 칸이다. 이 줄은 "오늘 챙김" 묶음이고 홈은 스크롤이 없어, 넷째를 넣으면
+          물 게이지(알약) — 이 줄의 세 번째이자 <b>마지막</b> 칸이다. 이 줄은 "오늘 챙김" 묶음이고 홈은 스크롤이 없어, 넷째를 넣으면
           320 폭에서 원이 겹친다. 체중·수면 같은 다음 후보는 각자의 탭으로(docs/HOME_WATER_TAP_ANALYSIS_2026-10-16.md §9).
         */}
         {person.waterMl != null ? (
           <WaterCup
             ml={person.waterMl}
-            fill={fill}
             name={person.name}
             mine={mine}
             onTap={onTapWater}
