@@ -16,6 +16,9 @@ public interface FastingSessionRepository extends JpaRepository<FastingSession, 
     /** 가장 최근 단식(진행 중 포함) — 되돌리기·시작 시각 겹침 판정·다음 플랜 제안 */
     Optional<FastingSession> findFirstByUserIdOrderByIdDesc(Long userId);
 
+    /** 가장 최근에 끝난 단식 — 리포트의 "지난 단식 결과" */
+    Optional<FastingSession> findFirstByUserIdAndEndedAtIsNotNullOrderByEndedAtDesc(Long userId);
+
     /** 이력 — 시작 시각이 from 이후인 단식, 최근 것부터 */
     List<FastingSession> findByUserIdAndStartedAtGreaterThanEqualOrderByStartedAtDesc(Long userId, LocalDateTime from);
 
