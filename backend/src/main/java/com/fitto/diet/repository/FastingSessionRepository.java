@@ -9,7 +9,11 @@ import java.util.Optional;
 
 public interface FastingSessionRepository extends JpaRepository<FastingSession, Long> {
 
-    Optional<FastingSession> findByUserIdAndEndedAtIsNull(Long userId);
+    /**
+     * 진행 중 단식 — 사람당 1개는 서비스가 사용자 행 잠금으로 보장한다({@code FastingService.start}).
+     * 잠금 전(2026-10-16 이전)에 동시 시작으로 두 개가 생겼어도 500 이 나지 않게 최신 하나만 읽는다.
+     */
+    Optional<FastingSession> findFirstByUserIdAndEndedAtIsNullOrderByIdDesc(Long userId);
 
     boolean existsByUserIdAndEndedAtIsNull(Long userId);
 

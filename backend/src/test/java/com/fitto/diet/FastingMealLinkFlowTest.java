@@ -33,7 +33,14 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -425,5 +432,59 @@ class FastingMealLinkFlowTest {
         LocalDateTime firstMark = reload(reached).getTargetNotifiedAt();
         targetNotifier.notifyReached(now.plusMinutes(1));
         assertThat(reload(reached).getTargetNotifiedAt()).isEqualTo(firstMark);
+    }
+
+    // ── 동시 시작 (docs/HOME_FASTING_TIMER_ANALYSIS_2026-10-16.md §6-1) ──────────────
+
+    @Test
+    void 동시에_시작해도_진행_중_단식은_하나뿐이다() throws Exception {
+        Long user = register("fml-race@fitto.com");
+        int n = 6;
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+        CountDownLatch go = new CountDownLatch(1);
+        AtomicInteger ok = new AtomicInteger();
+        AtomicInteger rejected = new AtomicInteger();
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            futures.add(pool.submit(() -> {
+                go.await();
+                try {
+                    fastingService.start(user, new StartFastingRequest(FastingPlan.SIXTEEN_EIGHT, null, null));
+                    ok.incrementAndGet();
+                } catch (BusinessException e) {
+                    rejected.incrementAndGet();
+                }
+                return null;
+            }));
+        }
+        go.countDown();
+        for (Future<?> f : futures) {
+            f.get(30, TimeUnit.SECONDS);
+        }
+        pool.shutdown();
+
+        assertThat(ok.get()).isEqualTo(1);
+        assertThat(rejected.get()).isEqualTo(n - 1);
+        long open = fastingRepository.findAll().stream()
+                .filter(s -> s.getUserId().equals(user) && s.getEndedAt() == null).count();
+        assertThat(open).isEqualTo(1);
+    }
+
+    @Test
+    void 예전에_생긴_중복_진행_단식이_있어도_조회와_종료가_깨지지_않는다() {
+        Long user = register("fml-dup@fitto.com");
+        LocalDateTime now = LocalDateTime.now();
+        fastStartedAt(user, FastingPlan.SIXTEEN_EIGHT, 16, now.minusHours(3));
+        FastingSession newer = fastStartedAt(user, FastingPlan.SIXTEEN_EIGHT, 16, now.minusHours(3));
+
+        FastingStatusResponse active = fastingService.active(user);
+        assertThat(active.active()).isTrue();
+
+        fastingService.end(user);
+        assertThat(reload(newer).getEndedAt()).isNotNull();
+        // 남은 하나도 다음 종료로 정리된다
+        assertThat(fastingService.active(user).active()).isTrue();
+        fastingService.end(user);
+        assertThat(fastingService.active(user).active()).isFalse();
     }
 }
