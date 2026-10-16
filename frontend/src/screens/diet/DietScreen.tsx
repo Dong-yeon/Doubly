@@ -468,11 +468,15 @@ export function DietScreen({ navigation, route }: Props) {
   const [waterGoalModal, setWaterGoalModal] = useState(false);
   const [waterGoalInput, setWaterGoalInput] = useState('');
   const [waterGoalBusy, setWaterGoalBusy] = useState(false);
+  // 칩 연타 — 렌더 전 두 번째 누름은 busy 상태를 아직 못 본다. ref 로 막아 요청이 하나만 나가게(화면·서버 어긋남 방지)
+  const waterGoalSaving = useRef(false);
   const onSaveWaterGoal = async (ml: number) => {
+    if (waterGoalSaving.current) return;
     if (!Number.isFinite(ml) || ml < 500 || ml > 10000) {
       toast.error('물 목표는 500~10,000ml 사이로 정해 주세요.');
       return;
     }
+    waterGoalSaving.current = true;
     setWaterGoalBusy(true);
     try {
       setWater(await waterApi.setGoal(Math.round(ml)));
@@ -482,6 +486,7 @@ export function DietScreen({ navigation, route }: Props) {
     } catch (e) {
       toast.error(getErrorMessage(e, '물 목표를 바꾸지 못했어요.'));
     } finally {
+      waterGoalSaving.current = false;
       setWaterGoalBusy(false);
     }
   };
@@ -1125,7 +1130,7 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
                 {!fasting?.active && insights?.lastFast && lastFastEndedToday(insights) ? (
                   <Text style={styles.fastResult}>
                     {insights.lastFast.achieved
-                      ? `🎉 지난 단식 ${formatFastingDuration(insights.lastFast.elapsedMin)} · 목표 달성` +
+                      ? `🎉 지난 단식 ${formatFastingDuration(insights.lastFast.elapsedMin)} 달성` +
                         (insights.lastFast.achievedThisWeek > 0 ? ` · 이번 주 ${insights.lastFast.achievedThisWeek}번째` : '') +
                         (insights.achievedStreak > 1 ? ` · ${insights.achievedStreak}일 연속` : '')
                       : `지난 단식 ${formatFastingDuration(insights.lastFast.elapsedMin)} (목표 ${insights.lastFast.targetHours}시간)`}
@@ -1139,14 +1144,14 @@ ${m.placeName} 방문 기록도 함께 지울 수 있어요.`, [
                   accessibilityRole="button"
                   accessibilityLabel="물·단식 리포트 보기"
                 >
-                  <Text style={styles.reportText}>
-                    물·단식 리포트
+                  <View style={styles.trackerText}>
+                    <Text style={styles.reportText}>물·단식 리포트</Text>
                     {insights ? (
                       <Text style={styles.trackerSub}>
-                        {'  '}최근 7일 단식 {insights.thisWeek.achievedCount}번 달성 · 물 목표 {insights.thisWeek.waterGoalDays}일
+                        최근 7일 단식 {insights.thisWeek.achievedCount}번 달성 · 물 목표 {insights.thisWeek.waterGoalDays}일 채움
                       </Text>
                     ) : null}
-                  </Text>
+                  </View>
                   <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
                 </Pressable>
               </View>
@@ -1741,7 +1746,7 @@ const styles = themedStyles((colors) => ({
   trackerDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.sm },
   fastResult: { fontSize: fontSize.caption, color: colors.meText, fontWeight: '700', marginTop: spacing.xs },
   reportRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 36 },
-  reportText: { flex: 1, fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
+  reportText: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   trackerText: { flex: 1, minWidth: 0 },
   trackerTitle: { fontSize: fontSize.body, fontWeight: '700', color: colors.textPrimary },
   trackerValue: { fontWeight: '600', color: colors.textSecondary },
